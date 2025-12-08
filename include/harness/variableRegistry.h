@@ -30,25 +30,17 @@ namespace SAMS{
         friend struct MPIManager;
         std::unordered_map<std::string, variableDef> variables;
         std::vector<std::function<void(std::string)>> allocateCallbacks;
-        variableRegistry() = default;
         std::unordered_map<std::string, variableDef>& getVariableMap() {
             return variables;
         }
 
-        /**
-         * Get a variable definition by name. Throws an error if the variable does not exist.
-         * @param name The name of the variable
-         * @return The variable definition
-         */
-        variableDef& getVariable(const std::string& name) {
-            auto it = variables.find(name);
-            if(it == variables.end()){
-                throw std::runtime_error("Error: variable " + name + " not found in registry\n");
-            }
-            return it->second;
-        }
+        SAMS::MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr;
+        SAMS::axisRegistry &axisReg;
+        SAMS::memoryRegistry &memReg;
 
         public:
+
+        variableRegistry(SAMS::MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr, SAMS::axisRegistry &axisReg, SAMS::memoryRegistry &memReg) : mpiMgr(mpiMgr), axisReg(axisReg), memReg(memReg) {}
 
         /**
          * Register a variable definition with a given name. If the variable already exists, make the definitions consistent.
@@ -70,11 +62,11 @@ namespace SAMS{
          * Syntatic sugar for registering a variable definition with a given name and dimensions. If the variable already exists, make the definitions consistent.
          * @param name The name of the variable (Must be from list of physically meaningful names)
          * @param varType The type of the variable (typeHandle)
-         * @param memSpace The memory space of the variable (memorySpace)
+         * @param memSpace The memory space of the variable (portableWrapper::arrayTags)
          * @param args The dimensions of the variable (dimension...)
          */
         template<typename... Args>
-        void registerVariable(const std::string& name, typeHandle varType, memorySpace memSpace, Args... args){
+        void registerVariable(const std::string& name, typeHandle varType, portableWrapper::arrayTags memSpace, Args... args){
             static_assert(sizeof...(args) <= MAX_RANK, "Error: variableDef rank exceeds MAX_RANK");
             variableDef varDef(varType, memSpace, args...);
             registerVariable(name, varDef);
@@ -83,15 +75,15 @@ namespace SAMS{
         /**
          * Register a variable definition with a given name, but specifying the type as a template parameter.
          * @param name The name of the variable (Must be from list of physically meaningful names)
-         * @param memSpace The memory space of the variable (memorySpace)
+         * @param memSpace The memory space of the variable (portableWrapper::arrayTags)
          * @param args The dimensions of the variable (dimension...)
          * @tparam T The C++ type of the variable
          */
         template<typename T, typename... Args>
-        void registerVariable(const std::string& name, memorySpace memSpace, Args... args){
+        void registerVariable(const std::string& name, portableWrapper::arrayTags memSpace, Args... args){
             static_assert(sizeof...(args) <= MAX_RANK, "Error: variableDef rank exceeds MAX_RANK");
             typeHandle varType = gettypeRegistry().getTypeID<T>();
-            variableDef varDef(varType, memSpace, args...);
+            variableDef varDef(mpiMgr, axisReg, memReg, varType, memSpace, args...);
             registerVariable(name, varDef);
         }
 
@@ -101,6 +93,19 @@ namespace SAMS{
          * @return The variable definition
          */
         const variableDef& getVariable(const std::string& name) const {
+            auto it = variables.find(name);
+            if(it == variables.end()){
+                throw std::runtime_error("Error: variable " + name + " not found in registry\n");
+            }
+            return it->second;
+        }
+
+        /**
+         * Get a variable definition by name. Throws an error if the variable does not exist.
+         * @param name The name of the variable
+         * @return The variable definition
+         */
+        variableDef& getVariable(const std::string& name) {
             auto it = variables.find(name);
             if(it == variables.end()){
                 throw std::runtime_error("Error: variable " + name + " not found in registry\n");
@@ -193,12 +198,12 @@ namespace SAMS{
         }
 
         #ifdef USE_KOKKOS
-        template<typename T, int Arank, portableWrapper::arrayTags tag>
+        /*template<typename T, int Arank, portableWrapper::arrayTags tag>
         auto getKokkosView(const std::string name) const {
             const auto & varDef = getVariable(name);
             auto ppArray = varDef.getPPArray<T, Arank, tag>();
             return portableWrapper::kokkos::toView(ppArray);
-        }
+        }*/
         #endif
 
         /** 
@@ -233,7 +238,6 @@ namespace SAMS{
             if(it == variables.end()){
                 throw std::runtime_error("Error: variable " + varName + " not found in registry\n");
             }
-            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
             it->second.haloExchange(axisName);
         }
 
@@ -265,14 +269,6 @@ namespace SAMS{
             it->second.haloExchange(axisName, edgeType);
         }
     };
-
-    /**
-     * Returns the singleton instance of the variableRegistry
-     */
-    inline variableRegistry& getvariableRegistry(){
-        static variableRegistry instance;
-        return instance;
-    }
 
 };
 

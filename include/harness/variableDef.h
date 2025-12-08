@@ -18,35 +18,40 @@
 #include <array>
 #include <stdexcept>
 #include <string>
+#include <memory>
+#include <vector>
 #include "typeRegistry.h"
 #include "harnessDef.h"
 #include "memoryRegistry.h"
 #include "staggerRegistry.h"
 #include "axisRegistry.h"
 #include "mpiManager.h"
+#include "boundaryConditions.h"
 
 namespace SAMS {
 
     /**
      * Class representing a variable definition
+     * Note that this class does not manage the data itself, only the metadata and MPI types
+     * Also, note that this class does not deep copy the data pointer on copy, so it also does not manage the data memory
      */
     class variableDef{
         private:
         template<int i>
         friend struct MPIManager;
 
-        /**
-         * To allow future expansion with different MPI managers
-         */
-        MPIManager<MPI_DECOMPOSITION_RANK>&mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
+        MPIManager<MPI_DECOMPOSITION_RANK>& mpiMgr;
+        axisRegistry &axisReg;
+        memoryRegistry &memReg;
 
         std::array<dimension, MAX_RANK> dimensions;
         typeHandle varType;
         MPI_Datatype mpiType;
         MPI_Datatype mpiSend[2*MAX_RANK]; //Array of MPI_Datatypes for sending in each dimension (lower and upper)
         MPI_Datatype mpiRecv[2*MAX_RANK]; //Array of MPI_Datatypes for receiving in each dimension (lower and upper)
+        std::array<std::array<std::vector<std::shared_ptr<boundaryConditions>>, 2>, MAX_RANK> boundaryConditionList;
         int rank=0;
-        memorySpace memSpace=memorySpace::DEFAULT;
+        portableWrapper::arrayTags memSpace;
 
         /**
          * Pointer to the data. This is a void pointer because the type is not known at compile time.
@@ -96,26 +101,18 @@ namespace SAMS {
             return dimensions;
         }
 
-        /**
-         * Get a single dimension
-         * @param dim The dimension to get (0 to rank-1)
-         */
-        dimension& getDimension(int dim) {
-            if(dim<0 || dim>=rank){
-                throw std::runtime_error("Error: variableDef getDimension dimension out of range\n");
-            }
-            return dimensions[dim];
-        }
-
     public:
     /**
      * Constructor
      * @param rank The rank of the variable (1-MAX_RANK)
      * @param varType The type of the variable (typeHandle)
-     * @param memSpace The memory space of the variable (memorySpace)
+     * @param memSpace The memory space of the variable (portableWrapper::arrayTags)
      */
-        variableDef(int rank, typeHandle varType, memorySpace memSpace)
-            : varType(varType), rank(rank), memSpace(memSpace) {
+        variableDef(SAMS::MPIManager<MPI_DECOMPOSITION_RANK>& mpiManager, axisRegistry &axisRegistry,
+            SAMS::memoryRegistry &memRegistry,
+            int rank, typeHandle varType, portableWrapper::arrayTags memSpace)
+            : varType(varType), rank(rank), memSpace(memSpace), mpiMgr(mpiManager), axisReg(axisRegistry), memReg(memRegistry)
+            {
             mpiType = gettypeRegistry().getMPIType(varType);
             if(rank<1 || rank>MAX_RANK){
                 throw std::runtime_error("Error: variableDef rank must be between 1 and " + std::to_string(MAX_RANK) + "\n");
@@ -124,11 +121,24 @@ namespace SAMS {
         }
 
         template<typename... Args>
-        variableDef(typeHandle varType, memorySpace memSpace, Args... args)
-            : variableDef(sizeof...(args), varType, memSpace) {
+        variableDef(
+            SAMS::MPIManager<MPI_DECOMPOSITION_RANK>& mpiManager, axisRegistry &axisRegistry,
+            SAMS::memoryRegistry &memRegistry,
+            typeHandle varType, portableWrapper::arrayTags memSpace, Args... args)
+            : variableDef(mpiManager, axisRegistry, memRegistry, sizeof...(args), varType, memSpace) {
             static_assert(sizeof...(args) <= MAX_RANK, "Error: variableDef rank exceeds MAX_RANK");
             setDimensions<0>(args...);
         }
+
+        // No copy assignment because of reference members
+        variableDef& operator=(const variableDef&) = delete;
+
+        // Move assignment operator is defaulted
+        variableDef& operator=(variableDef&&) = default;
+
+        //Both copy and move constructors are defaulted
+        variableDef(const variableDef&) = default;
+        variableDef(variableDef&&) = default;
 
         /**
          * This function makes two variableDefs consistent by taking the maximum ghost cells in each dimension. This produces the largest number of ghost cells required to hold both variableDefs.
@@ -149,7 +159,7 @@ namespace SAMS {
 
                 //Tell the axis about the lower and upper ghost cells
                 if (other.dimensions[i].axisName != "") {
-                    getaxisRegistry().setMaxGhosts(other.dimensions[i].axisName, other.dimensions[i].lowerGhosts, other.dimensions[i].upperGhosts);
+                    axisReg.setMaxGhosts(other.dimensions[i].axisName, other.dimensions[i].lowerGhosts, other.dimensions[i].upperGhosts);
                 }
 
                 //Stagger must match
@@ -228,15 +238,15 @@ namespace SAMS {
             size_t totalSize = gettypeRegistry().getSize(varType);
             for(int i=0; i<rank; i++){
                 if (dimensions[i].zones == 0) {
-                    const dimension& src = getaxisRegistry().getDimension(dimensions[i].axisName);
-                    getaxisRegistry().setMaxGhosts(dimensions[i].axisName, dimensions[i].lowerGhosts, dimensions[i].upperGhosts);
+                    const dimension& src = axisReg.getDimension(dimensions[i].axisName);
+                    axisReg.setMaxGhosts(dimensions[i].axisName, dimensions[i].lowerGhosts, dimensions[i].upperGhosts);
                     //Update the dimension from the Canonical axis. This updates the number of zones
                     //and the MPI decomposition info if applicable
                     dimensions[i].getInfoFrom(src);
                 }
                 totalSize *= (dimensions[i].getLocalNativeDomainElements() + dimensions[i].lowerGhosts + dimensions[i].upperGhosts);
             }
-            memoryRegistry &memHandler = getmemoryRegistry();
+            memoryRegistry &memHandler = memReg;
             dataPtr = memHandler.allocate(totalSize, memSpace);
             if(!dataPtr){
                 throw std::runtime_error("Error: variableDef allocation failed\n");
@@ -249,7 +259,7 @@ namespace SAMS {
          * Deallocate memory for the variable
          */
         void deallocate(){
-            memoryRegistry &memHandler = getmemoryRegistry();
+            memoryRegistry &memHandler = memReg;
             memHandler.deallocate(dataPtr);
             dataPtr = nullptr;
             //Clear the MPI types
@@ -257,31 +267,24 @@ namespace SAMS {
         }
 
         void haloExchange(){
-            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
             mpiMgr.haloExchange(dataPtr, rank, mpiSend, mpiRecv);
         }
 
         void haloExchange(int axis){
-            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
             mpiMgr.haloExchange(dataPtr, rank, mpiSend, mpiRecv, axis);
         }
 
         void haloExchange(std::string axisName){
-            auto &axisReg = getaxisRegistry();
             int axis = axisReg.getMPIAxis(axisName);
-            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
             mpiMgr.haloExchange(dataPtr, rank, mpiSend, mpiRecv, axis);
         }
 
         void haloExchange(int axis, SAMS::domain::edges edgeType){
-            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
             mpiMgr.haloExchange(dataPtr, rank, mpiSend, mpiRecv, axis, edgeType);
         }
 
         void haloExchange(std::string axisName, SAMS::domain::edges edgeType){
-            auto &axisReg = getaxisRegistry();
             int axis = axisReg.getMPIAxis(axisName);
-            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
             mpiMgr.haloExchange(dataPtr, rank, mpiSend, mpiRecv, axis, edgeType);
         }
 
@@ -327,7 +330,7 @@ namespace SAMS {
         /**
          * Get the memory space of the variable
          */
-        memorySpace getMemorySpace() const {
+        portableWrapper::arrayTags getMemorySpace() const {
             return memSpace;
         }
 
@@ -350,6 +353,157 @@ namespace SAMS {
         }
 
         /**
+         * Get a single dimension
+         * @param dim The dimension to get (0 to rank-1)
+         */
+        dimension& getDimension(int dim) {
+            if(dim<0 || dim>=rank){
+                throw std::runtime_error("Error: variableDef getDimension dimension out of range\n");
+            }
+            return dimensions[dim];
+        }
+
+        /**
+         * Add a boundary condition to a specified edge of a specified dimension
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param edge The edge to add the boundary condition to (SAMS::domain::edges)
+         * @param bc The boundary condition to add (shared_ptr to boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(int dim, SAMS::domain::edges edge, std::shared_ptr<T> bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            if(dim<0 || dim>=rank){
+                throw std::runtime_error("Error: variableDef addBoundaryCondition dimension out of range\n");
+            }
+            boundaryConditionList[dim][static_cast<int>(edge)].push_back(bc);
+            return bc;
+        }
+
+        /**
+         * Add a boundary condition to both edges of a specified dimension
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param bc The boundary condition to add (shared_ptr to boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to both edges
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(int dim, std::shared_ptr<T> bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            if(dim<0 || dim>=rank){
+                throw std::runtime_error("Error: variableDef addBoundaryCondition dimension out of range\n");
+            }
+            std::shared_ptr<boundaryConditions> bc_ptr = addBoundaryCondition(dim, SAMS::domain::edges::lower, bc);
+            addBoundaryCondition(dim, SAMS::domain::edges::upper, bc);
+            return bc_ptr;
+        }
+
+        /**
+         * Add a boundary condition to both edges of all dimensions
+         * @param bc The boundary condition to add (shared_ptr to boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to all edges of all dimensions
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(std::shared_ptr<T> bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            std::shared_ptr<boundaryConditions> bc_ptr = bc;
+            for(int dim=0; dim<rank; dim++){
+                addBoundaryCondition(dim, bc_ptr);
+            }
+            return bc_ptr;
+        }
+
+
+        /** 
+         * Add a boundary condition specified as an object (not a shared_ptr) to a specific edge of a specified dimension
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param edge The edge to add the boundary condition to (SAMS::domain::edges)
+         * @param bc The boundary condition to add (boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(int dim, SAMS::domain::edges edge, const T& bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            return addBoundaryCondition(dim, edge, std::make_shared<T>(bc));
+        }
+
+        /**
+         * Add a boundary condition specified as an object (not a shared_ptr) to both edges of a specified dimension
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param bc The boundary condition to add (boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to both edges
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(int dim, const T& bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            return addBoundaryCondition(dim, std::make_shared<T>(bc));
+        }
+
+        /**
+         * Add a boundary condition specified as an object (not a shared_ptr) to both edges of all dimensions
+         * @param bc The boundary condition to add (boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to all edges of all dimensions
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(const T& bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            return addBoundaryCondition(std::make_shared<T>(bc));
+        }
+
+        /**
+         * Emplace a specified boundary condition to a specific edge of a specified dimension
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param edge The edge to add the boundary condition to (SAMS::domain::edges)
+         * @param args The arguments to construct the boundary condition
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         */
+        template<typename T, typename... Args>
+        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(int dim, SAMS::domain::edges edge, Args... args){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef emplaceBoundaryCondition bc must be derived from boundaryConditions");
+            if constexpr (std::is_constructible_v<T, Args...>) {
+                //Can construct just from the args
+                return addBoundaryCondition(dim, edge, std::make_shared<T>(args...));
+            } else if constexpr (std::is_constructible_v<T, variableDef&, Args...>) {
+                //Need to pass variableDef as first argument
+                return addBoundaryCondition(dim, edge, std::make_shared<T>(*this, args...));
+            } else {
+                static_assert(portableWrapper::alwaysFalse<T>::value, "Error: variableDef emplaceBoundaryCondition cannot construct boundary condition with given arguments");
+            }
+        }
+
+        /**
+         * Emplace a specified boundary condition to both edges of a specified dimension
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param args The arguments to construct the boundary condition
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to both edges
+         */
+        template<typename T, typename... Args>
+        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(int dim, Args... args){
+            std::shared_ptr<boundaryConditions> bc_ptr = emplaceBoundaryCondition<T>(dim, SAMS::domain::edges::lower, args...);
+            addBoundaryCondition<T>(dim, SAMS::domain::edges::upper, bc_ptr);
+            return bc_ptr;
+        }
+
+        /**
+         * Emplace a specified boundary condition to both edges of all dimensions
+         * @param args The arguments to construct the boundary condition
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to all edges of all dimensions
+         */
+        template<typename T, typename... Args>
+        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(Args... args){
+            std::shared_ptr<boundaryConditions> bc_ptr = emplaceBoundaryCondition<T>(0, args...);
+            for(int dim=1; dim<rank; dim++){
+                addBoundaryCondition<T>(dim, bc_ptr);
+            }
+            return bc_ptr;
+        }
+
+        /**
          * Fill a portable array wrapping the variable data
          * @param array The portable array to fill
          */
@@ -364,8 +518,8 @@ namespace SAMS {
                 lowerBounds[i] = dimensions[i].getLocalLB();
                 upperBounds[i] = dimensions[i].getLocalUB();
             }
-            auto &manager = getmemoryRegistry().getArrayManager();
-            manager.wrap(array, static_cast<T*>(dataPtr), lowerBounds.data(), upperBounds.data());
+            auto &manager = memReg.getArrayManager();
+            manager.wrapArray(array, static_cast<T*>(dataPtr), lowerBounds.data(), upperBounds.data());
         }
 
         /**

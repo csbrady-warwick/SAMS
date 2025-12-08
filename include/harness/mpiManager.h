@@ -22,23 +22,6 @@ namespace SAMS
 
         namespace{
 
-            //Singleton map of MPIManager instances
-            template<int Dims>
-            inline std::unordered_map<MPI_Fint, MPIManager<Dims>> &getInstanceMap(){
-                static std::unordered_map<MPI_Fint, MPIManager<Dims>> instances;
-                static bool firstTime = true;
-                return instances;
-            }
-
-            //Recursive function to release all MPIManager instances for all ranks up to MAX_RANK
-            template<int Dims=0>
-            inline void releaseAllMPIManagers(){
-                getInstanceMap<Dims>().clear();
-                if constexpr (Dims<MAX_RANK){
-                    releaseAllMPIManagers<Dims+1>();
-                }
-            }
-
             #ifdef USE_MPI
             //Create a map from MPI_THREAD_* to a string for error messages
             inline static std::map<int, std::string> threadLevelMap = {
@@ -115,7 +98,6 @@ namespace SAMS
         }
 
         inline void finalize(){
-            releaseAllMPIManagers();
             #ifdef USE_MPI
             MPI_Finalize();
             #endif
@@ -130,6 +112,8 @@ namespace SAMS
     public:
     static const int Dims = i_Dims;
     private:
+
+        axisRegistry &ar;
 
         #ifdef USE_MPI
           //Create a map from an integer to an MPI combiner type string for naming purposes
@@ -562,6 +546,7 @@ namespace SAMS
 
 
         MPI_Datatype cacheType(MPI_Datatype newType){
+            #ifdef USE_MPI
             std::string Name = buildMPIGenericName(newType);
             //If type already in cache, return existing type
             MPI_Datatype existingType = getCacheEntry(Name, true);
@@ -573,6 +558,9 @@ namespace SAMS
             checkMPIError(MPI_Type_commit(&newType));
             registerMPIType(newType, Name);
             return newType;
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
         }
 
     public:
@@ -780,8 +768,8 @@ namespace SAMS
          */
         void decomposeAxis(const std::string &axisName)
         {
-            int axis = getaxisRegistry().getMPIAxis(axisName);
-            size_t globalElements = getaxisRegistry().getLocalDomainElements(axisName, staggerType::CENTRED);
+            int axis = ar.getMPIAxis(axisName);
+            size_t globalElements = ar.getLocalDomainElements(axisName, staggerType::CENTRED);
             size_t localElements = 0;
             if (axis >= 0)
             {
@@ -796,12 +784,13 @@ namespace SAMS
                 // Axis is not decomposed, so all elements are local
                 localElements = globalElements;
             }
-            getaxisRegistry().setLocalDomainElements(axisName, localElements, staggerType::CENTRED);
+            ar.setLocalDomainElements(axisName, localElements, staggerType::CENTRED);
 
-            if (axis < 0){
+            /*if (axis < 0){
                 //Axis is not decomposed so nothing more to do
                 return;
-            }
+            }*/
+           #ifdef USE_MPI
             //Now set part of the global axis that is on this processor
             size_t localLB = 0;
             for(int i=0; i<coords[axis]; i++){
@@ -813,8 +802,11 @@ namespace SAMS
                 }
                 localLB += procElements;
             }
+            #else
+            size_t localLB = 0;
+            #endif
             size_t localUB = localLB + localElements;
-            auto &axisRef = getaxisRegistry().getAxis(axisName);
+            auto &axisRef = ar.getAxis(axisName);
             axisRef.dim.setGlobalBounds(localLB, localUB);
             //axisRef.dim.setPeriodic(periods[axis] != 0);
         }
@@ -1123,7 +1115,7 @@ namespace SAMS
             SIGNED_INDEX_TYPE LB[MAX_RANK], UB[MAX_RANK];
             for (int axis = 0; axis < rank; axis++)
             {
-                auto &axisRef = getaxisRegistry().getAxis(dims[axis].axisName);
+                auto &axisRef = ar.getAxis(dims[axis].axisName);
                 //For non-decomposed axes, set MPI types to NULL
                 if (axisRef.MPIAxisIndex <0){
                     mpiSend[axis*2] = MPI_DATATYPE_NULL;
@@ -1143,8 +1135,8 @@ namespace SAMS
                         UB[i] = LB[i] + dims[i].upperGhosts-1;
                     } else {
                         //In other directions, send the whole local domain
-                        LB[i] = dims[i].getLocalDomainLB();
-                        UB[i] = dims[i].getLocalDomainUB();
+                        LB[i] = dims[i].getLocalLB();
+                        UB[i] = dims[i].getLocalUB();
                     }
                 }
                 SAMS::debugAll3 << "Creating lower send type on axis " << axis << std::endl;
@@ -1160,8 +1152,8 @@ namespace SAMS
                         UB[i] = dims[i].getLocalDomainUB();
                     } else {
                         //In other directions, send the whole local domain
-                        LB[i] = dims[i].getLocalDomainLB();
-                        UB[i] = dims[i].getLocalDomainUB();
+                        LB[i] = dims[i].getLocalLB();
+                        UB[i] = dims[i].getLocalUB();
                     }
                 }
                 mpiSend[axis*2+1] = createArraySliceType(rank, dims, LB, UB, baseType);
@@ -1175,8 +1167,8 @@ namespace SAMS
                         UB[i] = dims[i].getLocalDomainLB()-1;
                     } else {
                         //In other directions, receive the whole local domain
-                        LB[i] = dims[i].getLocalDomainLB();
-                        UB[i] = dims[i].getLocalDomainUB();
+                        LB[i] = dims[i].getLocalLB();
+                        UB[i] = dims[i].getLocalUB();
                     }
                 }
                 mpiRecv[axis*2] = createArraySliceType(rank, dims, LB, UB, baseType);
@@ -1191,8 +1183,8 @@ namespace SAMS
                         UB[i] = LB[i] + dims[i].upperGhosts-1;
                     } else {
                         //In other directions, receive the whole local domain
-                        LB[i] = dims[i].getLocalDomainLB();
-                        UB[i] = dims[i].getLocalDomainUB();
+                        LB[i] = dims[i].getLocalLB();
+                        UB[i] = dims[i].getLocalUB();
                     }
                 }
                 mpiRecv[axis*2+1] = createArraySliceType(rank, dims, LB, UB, baseType);
@@ -1243,7 +1235,7 @@ namespace SAMS
          */
         void decomposeAllAxes()
         {
-            const auto &areg = getaxisRegistry();
+            const auto &areg = ar;
             for (const auto &pair : areg.getAxisMap())
             {
                 SAMS::debug3 << "Decomposing axis: " << pair.first << std::endl;
@@ -1286,10 +1278,24 @@ namespace SAMS
 #endif
         }
 
+        void abort(const std::string &message, bool localError = false)
+        {
+#ifdef USE_MPI
+            if (localError) {
+                std::cerr << "Error detected on rank " << rank << " : " << message << std::endl;
+            } else {
+                SAMS::cerr << "Error detected : " << message << std::endl;
+            }
+            MPI_Abort(comm, 1);
+#else
+            throw std::runtime_error("Abort called: " + message);
+#endif
+        }
+
         /**
          * Create an MPIManager with default communicator MPI_COMM_WORLD
          */
-        MPIManager()
+        MPIManager(axisRegistry &axisReg) : ar(axisReg)
         {
             defaultInit(MPI_COMM_WORLD);
         }
@@ -1299,7 +1305,7 @@ namespace SAMS
          * Outer code must ensure that the communicator is valid throughout the lifetime of the MPIManager
          * @param customComm The custom MPI communicator to use
          */
-        MPIManager(MPI_Comm customComm)
+        MPIManager(axisRegistry &axisReg, MPI_Comm customComm) : ar(axisReg)
         {
             defaultInit(customComm);
         }
@@ -1316,24 +1322,6 @@ namespace SAMS
             #endif
         }
     };
-
-
-    template<int Dims=MPI_DECOMPOSITION_RANK>
-    MPIManager<Dims>& getMPIManager(MPI_Comm customComm = MPI_COMM_WORLD)
-    {
-        auto &instances = MPI::getInstanceMap<Dims>();
-        #ifdef USE_MPI
-        MPI_Fint commFint = MPI_Comm_c2f(customComm);
-        #else
-        MPI_Fint commFint = 0;
-        #endif
-        auto it = instances.find(commFint);
-        if (it == instances.end()) {
-            instances.emplace(commFint, customComm);
-        }
-        return instances[commFint];
-    }
-
 
 } // namespace SAMS
 

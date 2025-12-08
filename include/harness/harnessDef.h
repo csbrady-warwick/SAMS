@@ -51,9 +51,9 @@ namespace SAMS {
     namespace domain{
         enum class edges
         {
-            both = 0,
-            lower= 1,
-            upper= 2
+            lower= 0,
+            upper= 1,
+            EDGE_COUNT = 2
         };
     };
 

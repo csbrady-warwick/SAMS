@@ -134,10 +134,10 @@ namespace SAMS
              void createPositionAxisCore(staggerType stagger, dataFn &fn){
                 //Infer type of the axis from the callable
                 using T_array = std::remove_const_t<typename far::callableTraits<dataFn>::type>;
-                memorySpace memSpace = tag == portableWrapper::arrayTags::host ? memorySpace::HOST : memorySpace::DEVICE;
+                portableWrapper::arrayTags tagLocal = tag;
                 //If axis already exists, return
                 if (axisData.find(stagger) != axisData.end() &&
-                    axisData[stagger].find(memSpace) != axisData[stagger].end())
+                    axisData[stagger].find(tagLocal) != axisData[stagger].end())
                 {
                     return;
                 }
@@ -158,7 +158,7 @@ namespace SAMS
                     }
                 };
 
-                auto &axisInfo = axisData[stagger][memSpace];
+                auto &axisInfo = axisData[stagger][tagLocal];
                 axisInfo.axis.emplace<portableWrapper::portableArray<T_array, 1, tag>>();
                 axisInfo.axisType = SAMS::gettypeRegistry().getTypeID<T_array>();
                 auto &lineAxis = std::any_cast<portableWrapper::portableArray<T_array, 1, tag>&>(axisInfo.axis);
@@ -166,7 +166,7 @@ namespace SAMS
                 SIGNED_INDEX_TYPE upperBound = dim.getUB(stagger);
 
                 // Now initialize the axis
-                portableWrapper::Range range(lowerBound, upperBound);
+                portableWrapper::Range range = dim.getRange(stagger);
                 manager.allocate(lineAxis, range);
                 auto axisArray = lineAxis; //Copy for lambda capture without capturing the whole class
                 applyFn(LAMBDA(SIGNED_INDEX_TYPE i) { axisArray(i) = fn(i); }, range);
@@ -208,17 +208,17 @@ namespace SAMS
             /**
              * Create an axis based on a provided function that specifies the location of each axis point
              * @param stagger The staggering type of the axis
-             * @param memSpace The memory space to allocate the axis in
+             * @param tag The memory space tag to allocate the axis in
              * @param fn The function to compute the axis values
              */
             template <typename dataFn>
-            void createPositionAxis(staggerType stagger, memorySpace memSpace, dataFn &fn)
+            void createPositionAxis(staggerType stagger, portableWrapper::arrayTags tag, dataFn &fn)
             {
                 using T_dataType = typename far::callableTraits<dataFn>::type;
                 //static_assert(std::is_trivially_copyable_v<T_dataType>, "Error: axisRegistry createPositionAxis function must return a trivially copyable type\n");
-                if (memSpace == memorySpace::HOST) {
+                if (tag == portableWrapper::arrayTags::host) {
                     createPositionAxisCore<dataFn, portableWrapper::arrayTags::host>(stagger, fn);
-                } else if (memSpace == memorySpace::DEVICE){
+                } else if (tag == portableWrapper::arrayTags::accelerated){
                     createPositionAxisCore<dataFn, portableWrapper::arrayTags::accelerated>(stagger, fn);
                 } else {
                     throw std::runtime_error("Error: axisRegistry createPositionAxis unknown memory space\n");
@@ -240,15 +240,15 @@ namespace SAMS
                 static_assert(has_addition_v<has_addition_t<T_initial, T_delta>, has_addition_t<T_delta, T_delta>>, "Error: unable to add axisRegistry createDeltaAxis function return type and initial value type\n");
                 //Assume that the result of adding delta to itself is the type of the axis
                 using T_array = has_addition_t<T_delta, T_delta>;
-                memorySpace memSpace = tag == portableWrapper::arrayTags::host ? memorySpace::HOST : memorySpace::DEVICE;
+                portableWrapper::arrayTags tagLocal = tag;
                 //If axis already exists, return
                 if (axisData.find(stagger) != axisData.end() &&
-                    axisData[stagger].find(memSpace) != axisData[stagger].end())
+                    axisData[stagger].find(tagLocal) != axisData[stagger].end())
                 {
                     return;
                 }
 
-                auto &axisInfo = axisData[stagger][memSpace];
+                auto &axisInfo = axisData[stagger][tag];
                 SIGNED_INDEX_TYPE lowerBound = dim.getLB(stagger);
                 SIGNED_INDEX_TYPE upperBound = dim.getUB(stagger);
                 SIGNED_INDEX_TYPE domainLower = dim.getDomainLB(stagger);
@@ -312,21 +312,21 @@ namespace SAMS
             /**
              * Create a delta axis based on a provided function that specifies the delta between each axis point and a lower boundary value
              * @param stagger The staggering type of the axis
-             * @param memSpace The memory space to allocate the axis in
+             * @param tag The memory space tag to allocate the axis in
              * @param fn The function to compute the delta values
              * @param initialValue The initial value at the lower boundary of the axis
              */
             template<typename deltaFn>
-            void createDeltaAxis(staggerType stagger, memorySpace memSpace, deltaFn fn, T_dataType initialValue)
+            void createDeltaAxis(staggerType stagger, portableWrapper::arrayTags tag, deltaFn fn, T_dataType initialValue)
             {
                 //If axis already exists, return
                 /*if (axisData.find(stagger) != axisData.end() &&
-                    axisData[stagger].find(memSpace) != axisData[stagger].end())
+                    axisData[stagger].find(tag) != axisData[stagger].end())
                 {
                     return;
                 }
                 //If not, create it
-                auto axisInfo = axisData[stagger][memSpace];
+                auto axisInfo = axisData[stagger][tag];
                 SIGNED_INDEX_TYPE lowerBound = dim.getLB(stagger);
                 SIGNED_INDEX_TYPE upperBound = dim.getUB(stagger);
                 SIGNED_INDEX_TYPE domainLower = dim.getDomainLB(stagger);
@@ -384,46 +384,46 @@ namespace SAMS
             /**
              * Convenience function to create a linear axis from a given lower bound and uniform grid spacing
              * @param stagger The staggering type of the axis
-             * @param memSpace The memory space to allocate the axis in
+             * @param tag The memory space tag to allocate the axis in
              * @param delta The uniform grid spacing
              * @param lowerBound The lower bound of the axis (default 0.0)
              */
             template<typename T_range>
-            void createLinearAxis(staggerType stagger, memorySpace memSpace, T_range delta, T_range lowerBound=0.0)
+            void createLinearAxis(staggerType stagger, portableWrapper::arrayTags tag, T_range delta, T_range lowerBound=0.0)
             {
                 auto linearFn = LAMBDA(SIGNED_INDEX_TYPE i)->T_range
                 {
                     return lowerBound + delta * static_cast<T_range>(i);
                 };
-                createPositionAxis(stagger, memSpace, linearFn);
+                createPositionAxis(stagger, tag, linearFn);
             }
 
             /**
              * Convert an edge-centred (half-cell) axis to a centred (cell-centred) axis
-             * @param memSpace The memory space to allocate the axis in
+             * @param tag The memory space tag to allocate the axis in
              * @tparam T_array The data type of the array (default T_dataType) - Must match the type used to create the half-cell axis
              */
             template<typename T_array=T_dataType>
-            void createCentredAxis(memorySpace memSpace)
+            void createCentredAxis(portableWrapper::arrayTags tag)
             {
                 if constexpr(has_addition_v<T_array, T_array>) {
                     using T_add_result = has_addition_t<T_array, T_array>;
                     if constexpr(has_multiplication_v<double, T_add_result>){
                         using T_final_result = has_multiplication_t<double, T_add_result>;
-                            if (memSpace == memorySpace::HOST) {
-                                auto halfCellAxis = std::any_cast<portableWrapper::portableArray<T_array, 1, portableWrapper::arrayTags::host>&>(axisData[staggerType::HALF_CELL][memorySpace::HOST].axis);
+                            if (tag == portableWrapper::arrayTags::host) {
+                                auto halfCellAxis = std::any_cast<portableWrapper::portableArray<T_array, 1, portableWrapper::arrayTags::host>&>(axisData[staggerType::HALF_CELL][portableWrapper::arrayTags::host].axis);
                                 auto linearFn = LAMBDA(SIGNED_INDEX_TYPE i)->T_final_result
                                 {
                                     return 0.5 * (halfCellAxis(i) + halfCellAxis(i-1));
                                 };
-                                createPositionAxis(staggerType::CENTRED, memSpace, linearFn);
+                                createPositionAxis(staggerType::CENTRED, tag, linearFn);
                             } else {
-                                auto halfCellAxis = std::any_cast<portableWrapper::portableArray<T_array, 1, portableWrapper::arrayTags::accelerated>&>(axisData[staggerType::HALF_CELL][memorySpace::DEVICE].axis);
+                                auto halfCellAxis = std::any_cast<portableWrapper::portableArray<T_array, 1, portableWrapper::arrayTags::accelerated>&>(axisData[staggerType::HALF_CELL][portableWrapper::arrayTags::accelerated].axis);
                                 auto linearFn = LAMBDA(SIGNED_INDEX_TYPE i)->T_final_result
                                 {
                                     return 0.5 * (halfCellAxis(i) + halfCellAxis(i-1));
                                 };
-                                createPositionAxis(staggerType::CENTRED, memSpace, linearFn);
+                                createPositionAxis(staggerType::CENTRED, tag, linearFn);
                         }
                     }
                 }
@@ -437,19 +437,18 @@ namespace SAMS
             template<typename T_array=T_dataType, portableWrapper::arrayTags tag>
             void generateAxis(staggerType stagger)
             {
-                memorySpace memSpace = tag == portableWrapper::arrayTags::host ? memorySpace::HOST : memorySpace::DEVICE;
-                if (memSpace == memorySpace::HOST) {
+                if (tag == portableWrapper::arrayTags::host){
                     throw std::runtime_error("Error: HOST axis should have been created at domain setup\n");
-                } else if (memSpace == memorySpace::DEVICE){
+                } else if (tag == portableWrapper::arrayTags::accelerated){
                     using deviceArray = portableWrapper::acceleratedArray<T_array, 1>;
                     using hostArray = portableWrapper::hostArray<T_array, 1>;
-                    axisData[stagger][memSpace].axis.emplace<deviceArray>();
-                    std::any_cast<deviceArray&>(axisData[stagger][memSpace].axis) = manager.makeDeviceAvailable(std::any_cast<hostArray&>(axisData[stagger][memorySpace::HOST].axis));
+                    axisData[stagger][tag].axis.emplace<deviceArray>();
+                    std::any_cast<deviceArray&>(axisData[stagger][tag].axis) = manager.makeDeviceAvailable(std::any_cast<hostArray&>(axisData[stagger][portableWrapper::arrayTags::host].axis));
 
                     //If the delta axis exists on host, create it on device too
-                    if (axisData[stagger][memorySpace::HOST].delta.has_value() == true) {
-                        axisData[stagger][memSpace].delta.emplace<deviceArray>();
-                        std::any_cast<deviceArray&>(axisData[stagger][memSpace].delta) = manager.makeDeviceAvailable(std::any_cast<hostArray&>(axisData[stagger][memorySpace::HOST].delta));
+                    if (axisData[stagger][portableWrapper::arrayTags::host].delta.has_value() == true) {
+                        axisData[stagger][tag].delta.emplace<deviceArray>();
+                        std::any_cast<deviceArray&>(axisData[stagger][tag].delta) = manager.makeDeviceAvailable(std::any_cast<hostArray&>(axisData[stagger][portableWrapper::arrayTags::host].delta));
                     }
                 } else {
                     throw std::runtime_error("Error: Unsupported memory space for axis generation\n");
@@ -479,19 +478,19 @@ namespace SAMS
             axisInfo(const axisInfo &) = delete;
             axisInfo &operator=(const axisInfo &) = delete;
             axisInfo(axisInfo &&) = default;
-            axisInfo &operator=(axisInfo &&) = default;
-            std::unordered_map<staggerType, std::unordered_map<memorySpace, axisValues>> axisData;
+            axisInfo &operator=(axisInfo &&) = delete;
+            std::unordered_map<staggerType, std::unordered_map<portableWrapper::arrayTags, axisValues>> axisData;
 
             /**
              * Does a given axis exist in the registry?
              * @param stagger The staggering type of the axis
-             * @param memSpace The memory space of the axis
+             * @param tag The memory tag of the axis
              * @return True if the axis exists, false otherwise
              */
-            bool hasAxis(staggerType stagger, memorySpace memSpace)
+            bool hasAxis(staggerType stagger, portableWrapper::arrayTags tag)
             {
                 return (axisData.find(stagger) != axisData.end() &&
-                        axisData[stagger].find(memSpace) != axisData[stagger].end());
+                        axisData[stagger].find(tag) != axisData[stagger].end());
             }
 
             /**
@@ -504,12 +503,11 @@ namespace SAMS
             template<typename T_array=T_dataType, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated>
             portableWrapper::portableArray<T_array,1,tag> getPPAxis(staggerType stagger)
             {
-                memorySpace memSpace = tag == portableWrapper::arrayTags::host ? memorySpace::HOST : memorySpace::DEVICE;
-                if (!hasAxis(stagger, memSpace))
+                if (!hasAxis(stagger, tag))
                 {
                     generateAxis<T_array,tag>(stagger);
                 }
-                return std::any_cast<portableWrapper::portableArray<T_array,1,tag>&>(axisData[stagger][memSpace].axis);
+                return std::any_cast<portableWrapper::portableArray<T_array,1,tag>&>(axisData[stagger][tag].axis);
             }
 
             /**
@@ -521,26 +519,25 @@ namespace SAMS
             template<typename T_array, portableWrapper::arrayTags tag>
             void fillPPAxis(portableWrapper::portableArray<T_array, 1, tag> &array, staggerType stagger)
             {
-                memorySpace memSpace = tag == portableWrapper::arrayTags::host ? memorySpace::HOST : memorySpace::DEVICE;
-                if (!hasAxis(stagger, memSpace))
+                if (!hasAxis(stagger, tag))
                 {
                     generateAxis<T_array,tag>(stagger);
                 }
-                if (!axisData[stagger][memSpace].axis.has_value()) {
+                if (!axisData[stagger][tag].axis.has_value()) {
                     throw std::runtime_error("Error: axis data not available in fillPPAxis");
                 }
                 try {
-                    array = std::any_cast<portableWrapper::portableArray<T_array, 1, tag>&>(axisData[stagger][memSpace].axis);
+                    array = std::any_cast<portableWrapper::portableArray<T_array, 1, tag>&>(axisData[stagger][tag].axis);
                 } catch (const std::bad_any_cast &e) {
                     throw std::runtime_error("Error: incorrect type used in fillPPAxis");
                 }
             }
 
             #ifdef USE_KOKKOS
-            template<typename T_array, portableWrapper::arrayTags tag>
+            /*template<typename T_array, portableWrapper::arrayTags tag>
             auto getKokkosView(staggerType stagger){
                 return portableWrapper::kokkos::toView(getPPAxis<T_array, tag>(stagger));
-            }
+            }*/
             #endif
 
 
@@ -554,12 +551,11 @@ namespace SAMS
             template<typename T_array=T_dataType, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated>
             portableWrapper::portableArray<T_array,1,tag> getPPDelta(staggerType stagger)
             {
-                memorySpace memSpace = tag == portableWrapper::arrayTags::host ? memorySpace::HOST : memorySpace::DEVICE;
-                if (!hasAxis(stagger, memSpace))
+                if (!hasAxis(stagger, tag))
                 {
                     generateAxis<T_array,tag>(stagger);
                 }
-                return std::any_cast<portableWrapper::portableArray<T_array,1,tag>&>(axisData[stagger][memSpace].delta);
+                return std::any_cast<portableWrapper::portableArray<T_array,1,tag>&>(axisData[stagger][tag].delta);
             }
 
             /**
@@ -570,17 +566,17 @@ namespace SAMS
              * @tparam tag The memory tag of the array
              */
             template<typename T_array, portableWrapper::arrayTags tag>
-            void fillPPDelta(portableWrapper::portableArray<T_array, 1, tag> &array, staggerType stagger, memorySpace memSpace = memorySpace::DEFAULT)
+            void fillPPDelta(portableWrapper::portableArray<T_array, 1, tag> &array, staggerType stagger)
             {
-                if (!hasAxis(stagger, memSpace))
+                if (!hasAxis(stagger, tag))
                 {
                     generateAxis<T_array,tag>(stagger);
                 }
-                if (!axisData[stagger][memSpace].delta.has_value()) {
+                if (!axisData[stagger][tag].delta.has_value()) {
                     throw std::runtime_error("Error: delta data not available in fillPPDelta");
                 }
                 try {
-                    array = std::any_cast<portableWrapper::portableArray<T_array, 1, tag>&>(axisData[stagger][memSpace].delta);
+                    array = std::any_cast<portableWrapper::portableArray<T_array, 1, tag>&>(axisData[stagger][tag].delta);
                 } catch (const std::bad_any_cast &e) {
                     throw std::runtime_error("Error: incorrect type used in fillPPDelta");
                 }
@@ -656,9 +652,15 @@ namespace SAMS
             }
         }; // struct axisInfo
 
-        portableWrapper::portableArrayManager manager;
+        portableWrapper::portableArrayManager &manager;
         std::unordered_map<std::string, axisInfo> axisMap;
-        axisRegistry() = default;
+
+    public:
+
+        axisRegistry(SAMS::memoryRegistry &memRegistry)
+            : manager(memRegistry.getArrayManager())
+        {
+        }
 
         axisInfo& getAxis(const std::string &name)
         {
@@ -680,7 +682,6 @@ namespace SAMS
             return it->second;
         }
 
-    public:
         /**
          * Register a new axis with the given name
          * @param name The name of the axis to register
@@ -980,8 +981,8 @@ namespace SAMS
             auto &ax = getAxis(name);
             setDomainElements(name, elements);
             T_range delta = (maxVal - minVal) / static_cast<T_range>(ax.dim.getDomainElements(staggerType::HALF_CELL) - 1);
-            ax.createLinearAxis(staggerType::HALF_CELL, memorySpace::HOST, delta, minVal);
-            ax.createCentredAxis<T_range>(memorySpace::HOST);
+            ax.createLinearAxis(staggerType::HALF_CELL, portableWrapper::arrayTags::host, delta, minVal);
+            ax.createCentredAxis<T_range>(portableWrapper::arrayTags::host);
         }
 
         /**
@@ -997,10 +998,10 @@ namespace SAMS
             portableWrapper::portableArrayManager mgr;
             auto asv = detail::make_assignStaggeredValues<portableWrapper::arrayTags::host, portableWrapper::arrayTags::host>(values.data(), elements, stagger, mgr);
 
-            ax.createPositionAxis(stagger, memorySpace::HOST, asv);
+            ax.createPositionAxis(stagger, portableWrapper::arrayTags::host, asv);
             //If the axis is half-cell staggered and capable of being averaged to cell centres, do so
             if (stagger == staggerType::HALF_CELL) {
-                ax.createCentredAxis(memorySpace::HOST);
+                ax.createCentredAxis(portableWrapper::arrayTags::host);
             }
         }
 
@@ -1010,12 +1011,12 @@ namespace SAMS
             auto &ax = getAxis(name);
             COUNT_TYPE elements = static_cast<COUNT_TYPE>(values.size());
             setDomainElements(name, elements);
-            ax.createPositionAxis(stagger, memorySpace::HOST,
+            ax.createPositionAxis(stagger, portableWrapper::arrayTags::host,
                 [values,stagger](SIGNED_INDEX_TYPE i) -> T {
                     return values[static_cast<COUNT_TYPE>(i-(stagger==staggerType::CENTRED ? 1 : 0))];
                 });
             if (stagger == staggerType::HALF_CELL) {
-                ax.createCentredAxis(memorySpace::HOST);
+                ax.createCentredAxis(portableWrapper::arrayTags::host);
             }
         }
 
@@ -1024,10 +1025,10 @@ namespace SAMS
         {
             auto &ax = getAxis(name);
             setDomainElements(name, elements);
-            ax.createPositionAxis(stagger, memorySpace::HOST, fn);
+            ax.createPositionAxis(stagger, portableWrapper::arrayTags::host, fn);
             //If the axis is half-cell staggered and capable of being averaged to cell centres, do so
             if (stagger == staggerType::HALF_CELL) {
-                ax.createCentredAxis(memorySpace::HOST);
+                ax.createCentredAxis(portableWrapper::arrayTags::host);
             }
         }
 
@@ -1155,7 +1156,6 @@ namespace SAMS
          * Get a portable array wrapping the axis data
          * @param axisname The name of the axis
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array = T_dataType, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated>
         auto getPPAxis(const std::string axisname, staggerType stagger)
@@ -1169,7 +1169,6 @@ namespace SAMS
          * @param axisname The name of the axis
          * @param array The array to fill
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array, portableWrapper::arrayTags tag>
         void fillPPAxis(const std::string axisname, portableWrapper::portableArray<T_array, 1, tag> &array, staggerType stagger)
@@ -1187,12 +1186,12 @@ namespace SAMS
          * @param axisname The name of the axis
          * @param stagger The staggering type
          */
-        template<typename T_array = T_dataType, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated>
+        /*template<typename T_array = T_dataType, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated>
         auto getKokkosView(const std::string axisname, staggerType stagger)
         {
             auto &data = getAxis(axisname);
             return data.getKokkosView<T_array, tag>(stagger);
-        }
+        }*/
 #endif
 
         /**
@@ -1201,7 +1200,6 @@ namespace SAMS
          * so there will be overlap between MPI ranks
          * @param axisname The name of the axis
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array = T_dataType, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated>
         auto getPPLocalAxis(const std::string axisname, staggerType stagger)
@@ -1227,7 +1225,6 @@ namespace SAMS
          * @param axisname The name of the axis
          * @param array The array to fill
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array, portableWrapper::arrayTags tag>
         void fillPPLocalAxis(const std::string axisname, portableWrapper::portableArray<T_array, 1, tag> &array, staggerType stagger)
@@ -1250,7 +1247,6 @@ namespace SAMS
          * Get a portable array wrapping just the axis domain data on this local rank (i.e. excluding ghost cells)
          * @param axisname The name of the axis
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array = T_dataType, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated>
         auto getPPLocalDomainAxis(const std::string axisname, staggerType stagger)
@@ -1273,7 +1269,6 @@ namespace SAMS
          * Get a portable array wrapping the axis delta data
          * @param axisname The name of the axis
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array = T_dataType, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated>
         auto getPPDelta(const std::string axisname, staggerType stagger)
@@ -1287,7 +1282,6 @@ namespace SAMS
          * @param axisname The name of the axis
          * @param array The array to fill
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array, portableWrapper::arrayTags tag>
         void fillPPDelta(const std::string axisname, portableWrapper::portableArray<T_array, 1, tag> &array, staggerType stagger)
@@ -1302,7 +1296,6 @@ namespace SAMS
          * so there will be overlap between MPI ranks
          * @param axisname The name of the axis
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array = T_dataType, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated>
         auto getPPLocalDelta(const std::string axisname, staggerType stagger)
@@ -1328,10 +1321,9 @@ namespace SAMS
          * @param axisname The name of the axis
          * @param array The array to fill
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array, portableWrapper::arrayTags tag>
-        void fillPPLocalDelta(const std::string axisname, portableWrapper::portableArray<T_array, 1, tag> &array, staggerType stagger, memorySpace memSpace = memorySpace::DEFAULT)
+        void fillPPLocalDelta(const std::string axisname, portableWrapper::portableArray<T_array, 1, tag> &array, staggerType stagger)
         {
             //Get the full global axis delta data
             auto &data = getAxis(axisname);
@@ -1351,13 +1343,12 @@ namespace SAMS
          * Get a raw pointer to the axis data
          * @param axisname The name of the axis
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array = T_dataType>
-        T_array* getRawAxis(const std::string axisname, staggerType stagger, memorySpace memSpace = memorySpace::DEFAULT)
+        T_array* getRawAxis(const std::string axisname, staggerType stagger, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated)
         {
             auto &data = getAxis(axisname);
-            if (memSpace == memorySpace::HOST){
+            if (tag == portableWrapper::arrayTags::host){
                 auto axisArray = data.getPPAxis<T_array, portableWrapper::arrayTags::host>(stagger);
                 return axisArray.data();
             } else {
@@ -1370,13 +1361,12 @@ namespace SAMS
          * Get a raw pointer to the axis delta data
          * @param axisname The name of the axis
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array = T_dataType>
-        T_array* getRawDelta(const std::string axisname, staggerType stagger, memorySpace memSpace = memorySpace::DEFAULT)
+        T_array* getRawDelta(const std::string axisname, staggerType stagger, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated)
         {
             auto &data = getAxis(axisname);
-            if (memSpace == memorySpace::HOST){
+            if (tag == portableWrapper::arrayTags::host){
                 auto deltaArray = data.getPPDelta<T_array, portableWrapper::arrayTags::host>(stagger);
                 return deltaArray.data();
             } else {
@@ -1391,13 +1381,13 @@ namespace SAMS
          * so there will be overlap between MPI ranks
          * @param axisname The name of the axis
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
+         * @param tag The memory space tag (default accelerated)
          */
         template<typename T_array = T_dataType>
-        T_dataType* getRawLocalAxis(const std::string axisname, staggerType stagger, memorySpace memSpace = memorySpace::DEFAULT)
+        T_dataType* getRawLocalAxis(const std::string axisname, staggerType stagger, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated)
         {
             auto &data = getAxis(axisname);
-            if (memSpace == memorySpace::HOST){
+            if (tag == portableWrapper::arrayTags::host){
                 auto axisArray = data.getPPLocalAxis<T_array, portableWrapper::arrayTags::host>(stagger);
                 return axisArray.data();
             } else {
@@ -1412,13 +1402,12 @@ namespace SAMS
          * so there will be overlap between MPI ranks
          * @param axisname The name of the axis
          * @param stagger The staggering type
-         * @param memSpace The memory space (default DEFAULT)
          */
         template<typename T_array = T_dataType>
-        T_dataType* getRawLocalDelta(const std::string axisname, staggerType stagger, memorySpace memSpace = memorySpace::DEFAULT)
+        T_dataType* getRawLocalDelta(const std::string axisname, staggerType stagger, portableWrapper::arrayTags tag=portableWrapper::arrayTags::accelerated)
         {
             auto &data = getAxis(axisname);
-            if (memSpace == memorySpace::HOST){
+            if (tag == portableWrapper::arrayTags::host){
                 auto deltaArray = data.getPPLocalDelta<T_array, portableWrapper::arrayTags::host>(stagger);
                 return deltaArray.data();
             } else {
@@ -1433,12 +1422,6 @@ namespace SAMS
             manager.clear();
         }
     };
-
-    inline axisRegistry &getaxisRegistry()
-    {
-        static axisRegistry instance;
-        return instance;
-    }
 
 };
 
