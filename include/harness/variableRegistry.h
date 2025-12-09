@@ -69,13 +69,28 @@ namespace SAMS{
         /**
          * Syntatic sugar for registering a variable definition with a given name and dimensions. If the variable already exists, make the definitions consistent.
          * @param name The name of the variable (Must be from list of physically meaningful names)
-         * @param varType The type of the variable (typeID)
+         * @param varType The type of the variable (typeHandle)
          * @param memSpace The memory space of the variable (memorySpace)
          * @param args The dimensions of the variable (dimension...)
          */
         template<typename... Args>
-        void registerVariable(const std::string& name, typeID varType, memorySpace memSpace, Args... args){
+        void registerVariable(const std::string& name, typeHandle varType, memorySpace memSpace, Args... args){
             static_assert(sizeof...(args) <= MAX_RANK, "Error: variableDef rank exceeds MAX_RANK");
+            variableDef varDef(varType, memSpace, args...);
+            registerVariable(name, varDef);
+        }
+
+        /**
+         * Register a variable definition with a given name, but specifying the type as a template parameter.
+         * @param name The name of the variable (Must be from list of physically meaningful names)
+         * @param memSpace The memory space of the variable (memorySpace)
+         * @param args The dimensions of the variable (dimension...)
+         * @tparam T The C++ type of the variable
+         */
+        template<typename T, typename... Args>
+        void registerVariable(const std::string& name, memorySpace memSpace, Args... args){
+            static_assert(sizeof...(args) <= MAX_RANK, "Error: variableDef rank exceeds MAX_RANK");
+            typeHandle varType = gettypeRegistry().getTypeID<T>();
             variableDef varDef(varType, memSpace, args...);
             registerVariable(name, varDef);
         }
@@ -166,6 +181,26 @@ namespace SAMS{
             varDef.fillPPArray(array);
         }
 
+        /**
+         * Return an internal library performance portable array from the description of a variable in the registry
+         */
+        template<typename T, int Arank , portableWrapper::arrayTags tag>
+        portableWrapper::portableArray<T, Arank, tag> getPPArray(const std::string name) const {
+            const auto & varDef = getVariable(name);
+            portableWrapper::portableArray<T, Arank, tag> array;
+            varDef.fillPPArray(array);
+            return array;
+        }
+
+        #ifdef USE_KOKKOS
+        template<typename T, int Arank, portableWrapper::arrayTags tag>
+        auto getKokkosView(const std::string name) const {
+            const auto & varDef = getVariable(name);
+            auto ppArray = varDef.getPPArray<T, Arank, tag>();
+            return portableWrapper::kokkos::toView(ppArray);
+        }
+        #endif
+
         /** 
          * Do a halo exchange for a named variable
          */
@@ -177,6 +212,58 @@ namespace SAMS{
             it->second.haloExchange();
         }
 
+        /** 
+         * Do a halo exchange for a named variable on a specific axis
+         */
+        void haloExchange(const std::string &name, int axis){
+            auto it = variables.find(name);
+            if(it == variables.end()){
+                throw std::runtime_error("Error: variable " + name + " not found in registry\n");
+            }
+            it->second.haloExchange(axis);
+        }
+
+        /** 
+         * Do a halo exchange for a named variable on a specific named axis
+         * @param varName The name of the variable
+         * @param axisName The name of the axis
+         */
+        void haloExchange(const std::string &varName, const std::string &axisName){
+            auto it = variables.find(varName);
+            if(it == variables.end()){
+                throw std::runtime_error("Error: variable " + varName + " not found in registry\n");
+            }
+            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
+            it->second.haloExchange(axisName);
+        }
+
+        /**
+         * Do a halo exchange for a named variable on a specific axis and edge
+         * @param name The name of the variable
+         * @param axis The axis index
+         * @param edgeType The edge type (lower, upper, both)
+         */
+        void haloExchange(const std::string &name, int axis, SAMS::domain::edges edgeType){
+            auto it = variables.find(name);
+            if(it == variables.end()){
+                throw std::runtime_error("Error: variable " + name + " not found in registry\n");
+            }
+            it->second.haloExchange(axis, edgeType);
+        }
+
+        /**
+         * Do a halo exchange for a named variable on a specific named axis and edge
+         * @param Name The name of the variable
+         * @param axisName The name of the axis
+         * @param edgeType The edge type (lower, upper, both)
+         */
+        void haloExchange(const std::string &varName, const std::string &axisName, SAMS::domain::edges edgeType){
+            auto it = variables.find(varName);
+            if(it == variables.end()){
+                throw std::runtime_error("Error: variable " + varName + " not found in registry\n");
+            }
+            it->second.haloExchange(axisName, edgeType);
+        }
     };
 
     /**

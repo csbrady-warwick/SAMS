@@ -48,6 +48,15 @@ namespace SAMS {
      */
     constexpr int MPI_DECOMPOSITION_RANK = 3;
 
+    namespace domain{
+        enum class edges
+        {
+            both = 0,
+            lower= 1,
+            upper= 2
+        };
+    };
+
 } //namespace SAMS
 
 #endif

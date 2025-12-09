@@ -23,6 +23,7 @@
 #include "remapData.h"
 #include "typedefs.h"
 #include "mpiManager.h"
+#include "variableDef.h"
 
 //Possible geometry types
 enum class geometryType {
@@ -134,6 +135,12 @@ struct simulationData{
     lineArray xb; //Cell boundary X-coordinates
     lineArray yb; //Cell boundary Y-coordinates
     lineArray zb; //Cell boundary Z-coordinates
+    hostLineArray xc_host; //Host copy of cell center X-coordinates
+    hostLineArray yc_host; //Host copy of cell center Y-coordinates
+    hostLineArray zc_host; //Host copy of cell center Z-coordinates
+    hostLineArray xb_host; //Host copy of cell boundary X-coordinates
+    hostLineArray yb_host; //Host copy of cell boundary Y-coordinates
+    hostLineArray zb_host; //Host copy of cell boundary Z-coordinates
     lineArray xb_global; //Global cell boundary X-coordinates
     lineArray yb_global; //Global cell boundary Y-coordinates
     lineArray zb_global; //Global cell boundary Z-coordinates
@@ -163,10 +170,26 @@ struct simulationData{
     bool isyUB = false; // Is this processor on the y-max boundary
     bool iszLB = false; // Is this processor on the z-min boundary
     bool iszUB = false; // Is this processor on the z-max boundary
+
+    MPI_Datatype mpiType = MPI_DATATYPE_NULL; // MPI datatype for T_dataType
 };
 
 class simulation{
 private:
+
+/*SAMS::variableDef *rho=nullptr;
+SAMS::variableDef *energy_electron=nullptr;
+SAMS::variableDef *energy_ion=nullptr;
+SAMS::variableDef *vx=nullptr;
+SAMS::variableDef *vy=nullptr;
+SAMS::variableDef *vz=nullptr;
+SAMS::variableDef *vx1=nullptr;
+SAMS::variableDef *vy1=nullptr;
+SAMS::variableDef *vz1=nullptr;
+SAMS::variableDef *bx=nullptr;
+SAMS::variableDef *by=nullptr;
+SAMS::variableDef *bz=nullptr;
+SAMS::variableDef *dm=nullptr;*/
 
 public:
 

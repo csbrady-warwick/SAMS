@@ -23,36 +23,34 @@
  void simulation::registerVars(){
 
     auto& varRegistry = SAMS::getvariableRegistry();
-    auto& typeRegistry = SAMS::gettypeRegistry();
-    SAMS::typeID type = typeRegistry.getTypeID<T_dataType>();
 
     const int ghosts=2; //2 Ghost cells at top and bottom of each dimension
 
-    varRegistry.registerVariable("energy_electron", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
+    varRegistry.registerVariable<T_dataType>("energy_electron", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
 
-    varRegistry.registerVariable("energy_ion", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
+    varRegistry.registerVariable<T_dataType>("energy_ion", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
 
-    varRegistry.registerVariable("rho", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
+    varRegistry.registerVariable<T_dataType>("rho", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
 
-    varRegistry.registerVariable("vx", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
+    varRegistry.registerVariable<T_dataType>("vx", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
 
-    varRegistry.registerVariable("vy", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
+    varRegistry.registerVariable<T_dataType>("vy", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
 
-    varRegistry.registerVariable("vz", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
+    varRegistry.registerVariable<T_dataType>("vz", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
     
-    varRegistry.registerVariable("vx1", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
+    varRegistry.registerVariable<T_dataType>("LARE/vx1", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
 
-    varRegistry.registerVariable("vy1", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
+    varRegistry.registerVariable<T_dataType>("LARE/vy1", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
 
-    varRegistry.registerVariable("vz1", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
+    varRegistry.registerVariable<T_dataType>("LARE/vz1", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
 
-    varRegistry.registerVariable("bx", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
+    varRegistry.registerVariable<T_dataType>("bx", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
 
-    varRegistry.registerVariable("by", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts));
+    varRegistry.registerVariable<T_dataType>("by", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts));
 
-    varRegistry.registerVariable("bz", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
+    varRegistry.registerVariable<T_dataType>("bz", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
 
-    varRegistry.registerVariable("dm", type, SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::CENTRED), SAMS::dimension("Y",ghosts, SAMS::staggerType::CENTRED), SAMS::dimension("Z",ghosts, SAMS::staggerType::CENTRED));
+    varRegistry.registerVariable<T_dataType>("LARE/dm", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::CENTRED), SAMS::dimension("Y",ghosts, SAMS::staggerType::CENTRED), SAMS::dimension("Z",ghosts, SAMS::staggerType::CENTRED));
  }
 
 /**
@@ -78,7 +76,6 @@ void simulation::allocate(simulationData &data)
     data.ybLocalRange = axRegistry.getLocalRange("Y", SAMS::staggerType::HALF_CELL);
     data.zbLocalRange = axRegistry.getLocalRange("Z", SAMS::staggerType::HALF_CELL);
 
-    std::flush(std::cout);
     //Get the ranges for the actual domain (no ghost cells)
     data.xcLocalDomainRange = axRegistry.getLocalDomainRange("X", SAMS::staggerType::CENTRED);
     data.ycLocalDomainRange = axRegistry.getLocalDomainRange("Y", SAMS::staggerType::CENTRED);
@@ -116,21 +113,21 @@ void simulation::allocate(simulationData &data)
     portableWrapper::assign(data.by, 0.0);
     varRegistry.fillPPArray("bz", data.bz);
     portableWrapper::assign(data.bz, 0.0);
-    varRegistry.fillPPArray("vx1", data.vx1);
+    varRegistry.fillPPArray("LARE/vx1", data.vx1);
     portableWrapper::assign(data.vx1, 0.0);
-    varRegistry.fillPPArray("vy1", data.vy1);
+    varRegistry.fillPPArray("LARE/vy1", data.vy1);
     portableWrapper::assign(data.vy1, 0.0);
-    varRegistry.fillPPArray("vz1", data.vz1);
+    varRegistry.fillPPArray("LARE/vz1", data.vz1);
     portableWrapper::assign(data.vz1, 0.0);
-    varRegistry.fillPPArray("dm", data.dm);
+    varRegistry.fillPPArray("LARE/dm", data.dm);
     portableWrapper::assign(data.dm, 0.0);
 
-    data.isxLB = SAMS::getMPIManager().isEdge(0,true);
-    data.isxUB = SAMS::getMPIManager().isEdge(0,false);
-    data.isyLB = SAMS::getMPIManager().isEdge(1,true);
-    data.isyUB = SAMS::getMPIManager().isEdge(1,false);
-    data.iszLB = SAMS::getMPIManager().isEdge(2,true);
-    data.iszUB = SAMS::getMPIManager().isEdge(2,false);
+    data.isxLB = SAMS::getMPIManager().isEdge(0,SAMS::domain::edges::lower);
+    data.isxUB = SAMS::getMPIManager().isEdge(0,SAMS::domain::edges::upper);
+    data.isyLB = SAMS::getMPIManager().isEdge(1,SAMS::domain::edges::lower);
+    data.isyUB = SAMS::getMPIManager().isEdge(1,SAMS::domain::edges::upper);
+    data.iszLB = SAMS::getMPIManager().isEdge(2,SAMS::domain::edges::lower);
+    data.iszUB = SAMS::getMPIManager().isEdge(2,SAMS::domain::edges::upper);
 
     SAMS::debugAll3 << "Edge detection: "
         << " XLB: " << data.isxLB << " XUB: " << data.isxUB
@@ -150,39 +147,28 @@ void simulation::allocate(simulationData &data)
     manager.allocate(data.cv1, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
     manager.allocate(data.cvc, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
 
-    data.xc = axRegistry.getPPLocalAxis("X", SAMS::staggerType::CENTRED);
-    data.yc = axRegistry.getPPLocalAxis("Y", SAMS::staggerType::CENTRED);
-    data.zc = axRegistry.getPPLocalAxis("Z", SAMS::staggerType::CENTRED);
-    data.xb = axRegistry.getPPLocalAxis("X", SAMS::staggerType::HALF_CELL);
-    data.yb = axRegistry.getPPLocalAxis("Y", SAMS::staggerType::HALF_CELL);
-    data.zb = axRegistry.getPPLocalAxis("Z", SAMS::staggerType::HALF_CELL);
-    data.zb_global = axRegistry.getPPAxis("X", SAMS::staggerType::HALF_CELL);
-    data.yb_global = axRegistry.getPPAxis("Y", SAMS::staggerType::HALF_CELL);
-    data.xb_global = axRegistry.getPPAxis("Z", SAMS::staggerType::HALF_CELL);
+    axRegistry.fillPPLocalAxis("X", data.xc, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPLocalAxis("Y", data.yc, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPLocalAxis("Z", data.zc, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPLocalAxis("X", data.xb, SAMS::staggerType::HALF_CELL);
+    axRegistry.fillPPLocalAxis("Y", data.yb, SAMS::staggerType::HALF_CELL);
+    axRegistry.fillPPLocalAxis("Z", data.zb, SAMS::staggerType::HALF_CELL);
+    axRegistry.fillPPLocalAxis("X", data.xb_host, SAMS::staggerType::HALF_CELL);
+    axRegistry.fillPPLocalAxis("Y", data.yb_host, SAMS::staggerType::HALF_CELL);
+    axRegistry.fillPPLocalAxis("Z", data.zb_host, SAMS::staggerType::HALF_CELL);
+    axRegistry.fillPPLocalAxis("X", data.xc_host, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPLocalAxis("Y", data.yc_host, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPLocalAxis("Z", data.zc_host, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPAxis("X", data.xb_global, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPAxis("Y", data.yb_global, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPAxis("Z", data.zb_global, SAMS::staggerType::CENTRED);
 
-    /*manager.allocateManaged(data.xc, data.xcLocalRange);
-    manager.allocateManaged(data.yc, data.ycLocalRange);
-    manager.allocateManaged(data.zc, data.zcLocalRange);
-    manager.allocate(data.xb, data.xbLocalRange);
-    manager.allocate(data.yb, data.ybLocalRange);
-    manager.allocate(data.zb, data.zbLocalRange);
-    manager.allocate(data.xb_global, Range(-2, nx + 2));
-    manager.allocate(data.yb_global, Range(-2, ny + 2));
-    manager.allocate(data.zb_global, Range(-2, nz + 2));*/
-
-    data.dxc = axRegistry.getPPLocalDelta("X", SAMS::staggerType::CENTRED);
-    data.dyc = axRegistry.getPPLocalDelta("Y", SAMS::staggerType::CENTRED);
-    data.dzc = axRegistry.getPPLocalDelta("Z", SAMS::staggerType::CENTRED);
-    data.dxb = axRegistry.getPPLocalDelta("X", SAMS::staggerType::HALF_CELL);
-    data.dyb = axRegistry.getPPLocalDelta("Y", SAMS::staggerType::HALF_CELL);
-    data.dzb = axRegistry.getPPLocalDelta("Z", SAMS::staggerType::HALF_CELL);
-
-    /*manager.allocate(data.dxc, Range(-1, nx + 2));
-    manager.allocate(data.dyc, Range(-1, ny + 2));
-    manager.allocate(data.dzc, Range(-1, nz + 2));
-    manager.allocate(data.dxb, Range(-2, nx + 2));
-    manager.allocate(data.dyb, Range(-2, ny + 2));
-    manager.allocate(data.dzb, Range(-2, nz + 2));*/
+    axRegistry.fillPPLocalDelta("X", data.dxc, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPLocalDelta("Y", data.dyc, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPLocalDelta("Z", data.dzc, SAMS::staggerType::CENTRED);
+    axRegistry.fillPPLocalDelta("X", data.dxb, SAMS::staggerType::HALF_CELL);
+    axRegistry.fillPPLocalDelta("Y", data.dyb, SAMS::staggerType::HALF_CELL);
+    axRegistry.fillPPLocalDelta("Z", data.dzb, SAMS::staggerType::HALF_CELL);
 
     manager.allocate(data.hy, Range(-2, nx + 2));
     manager.allocate(data.hz, Range(-2, nx + 2), Range(-2, ny + 2));
@@ -200,6 +186,8 @@ void simulation::allocate(simulationData &data)
     {
         manager.allocate(data.delta_ke, Range(-1, nx + 2), Range(-1, ny + 2), Range(-1, nz + 2));
     }
+
+    data.mpiType = SAMS::gettypeRegistry().getMPIType(SAMS::gettypeRegistry().getTypeID<T_dataType>());
 }
 
 /**
@@ -222,154 +210,7 @@ void simulation::grid(simulationData &data)
     data.dy = data.length_y / static_cast<T_dataType>(data.ny);
     data.dz = data.length_z / static_cast<T_dataType>(data.nz);
 
-    /*// Setup global arrays
-    {
-        // Should this be done on the host and copied?
-        // Set xb
-        auto l1 = LAMBDA(T_indexType ix) { data.xb_global(ix) = data.x_min + ix * data.dx; };
-        portableWrapper::applyKernel(l1, portableWrapper::Range(-2, data.nx + 2));
-        // Set yb
-        auto l2 = LAMBDA(T_indexType iy) { data.yb_global(iy) = data.y_min + iy * data.dy; };
-        portableWrapper::applyKernel(l2, portableWrapper::Range(-2, data.ny + 2));
-        // Set zb
-        auto l3 = LAMBDA(T_indexType iz) { data.zb_global(iz) = data.z_min + iz * data.dz; };
-        portableWrapper::applyKernel(l3, portableWrapper::Range(-2, data.nz + 2));
-        portableWrapper::fence();
-    }
-
-    // Stretch the arrays if requested (todo)
-    {
-    }
-
-    // Apply periodic boundary conditions (todo)
-    {
-        auto l1 = LAMBDA(T_indexType ix)
-        {
-            if (data.xbc_min == BCType::BC_PERIODIC)
-            {
-                data.xb_global(data.nx + 1) = data.xb_global(data.nx) + (data.xb_global(1) - data.xb_global(0));
-                data.xb_global(data.nx + 2) = data.xb_global(data.nx) + (data.xb_global(2) - data.xb_global(0));
-                data.xb_global(-1) = data.xb_global(0) - (data.xb_global(data.nx) - data.xb_global(data.nx - 1));
-                data.xb_global(-2) = data.xb_global(0) - (data.xb_global(data.nx) - data.xb_global(data.nx - 2));
-            }
-            else
-            {
-                data.xb_global(data.nx + 1) = 2.0 * data.xb_global(data.nx) - data.xb_global(data.nx - 1);
-                data.xb_global(data.nx + 2) = 2.0 * data.xb_global(data.nx) - data.xb_global(data.nx - 2);
-                data.xb_global(-1) = 2.0 * data.xb_global(0) - data.xb_global(1);
-                data.xb_global(-2) = 2.0 * data.xb_global(0) - data.xb_global(2);
-            }
-            if (data.ybc_min == BCType::BC_PERIODIC)
-            {
-                data.yb_global(data.ny + 1) = data.yb_global(data.ny) + (data.yb_global(1) - data.yb_global(0));
-                data.yb_global(data.ny + 2) = data.yb_global(data.ny) + (data.yb_global(2) - data.yb_global(0));
-                data.yb_global(-1) = data.yb_global(0) - (data.yb_global(data.ny) - data.yb_global(data.ny - 1));
-                data.yb_global(-2) = data.yb_global(0) - (data.yb_global(data.ny) - data.yb_global(data.ny - 2));
-            }
-            else
-            {
-                data.yb_global(data.ny + 1) = 2.0 * data.yb_global(data.ny) - data.yb_global(data.ny - 1);
-                data.yb_global(data.ny + 2) = 2.0 * data.yb_global(data.ny) - data.yb_global(data.ny - 2);
-                data.yb_global(-1) = 2.0 * data.yb_global(0) - data.yb_global(1);
-                data.yb_global(-2) = 2.0 * data.yb_global(0) - data.yb_global(2);
-            }
-            if (data.zbc_min == BCType::BC_PERIODIC)
-            {
-                data.zb_global(data.nz + 1) = data.zb_global(data.nz) + (data.zb_global(1) - data.zb_global(0));
-                data.zb_global(data.nz + 2) = data.zb_global(data.nz) + (data.zb_global(2) - data.zb_global(0));
-                data.zb_global(-1) = data.zb_global(0) - (data.zb_global(data.nz) - data.zb_global(data.nz - 1));
-                data.zb_global(-2) = data.zb_global(0) - (data.zb_global(data.nz) - data.zb_global(data.nz - 2));
-            }
-            else
-            {
-                data.zb_global(data.nz + 1) = 2.0 * data.zb_global(data.nz) - data.zb_global(data.nz - 1);
-                data.zb_global(data.nz + 2) = 2.0 * data.zb_global(data.nz) - data.zb_global(data.nz - 2);
-                data.zb_global(-1) = 2.0 * data.zb_global(0) - data.zb_global(1);
-                data.zb_global(-2) = 2.0 * data.zb_global(0) - data.zb_global(2);
-            }
-        };
-
-        // Range here is entirely fake, this is just to get device code
-        portableWrapper::applyKernel(l1, portableWrapper::Range(0, 0));
-    }
-
-    // Copy over xb,yb and zb from global
-    {
-        auto l1 = LAMBDA(T_indexType ix) { data.xb(ix) = data.xb_global(ix); };
-        portableWrapper::applyKernel(l1, portableWrapper::Range(-2, data.nx + 2));
-        auto l2 = LAMBDA(T_indexType iy) { data.yb(iy) = data.yb_global(iy); };
-        portableWrapper::applyKernel(l2, portableWrapper::Range(-2, data.ny + 2));
-        auto l3 = LAMBDA(T_indexType iz) { data.zb(iz) = data.zb_global(iz); };
-        portableWrapper::applyKernel(l3, portableWrapper::Range(-2, data.nz + 2));
-        portableWrapper::fence();
-    }
-
-    // Now calculate xc, yc and zc
-    {
-        auto l1 = LAMBDA(T_indexType ix) { data.xc(ix) = 0.5 * (data.xb_global(ix - 1) + data.xb_global(ix)); };
-        portableWrapper::applyKernel(l1, portableWrapper::Range(-1, data.nx + 2));
-        auto l2 = LAMBDA(T_indexType iy) { data.yc(iy) = 0.5 * (data.yb_global(iy - 1) + data.yb_global(iy)); };
-        portableWrapper::applyKernel(l2, portableWrapper::Range(-1, data.ny + 2));
-        auto l3 = LAMBDA(T_indexType iz) { data.zc(iz) = 0.5 * (data.zb_global(iz - 1) + data.zb_global(iz)); };
-        portableWrapper::applyKernel(l3, portableWrapper::Range(-1, data.nz + 2));
-        portableWrapper::fence();
-    }*/
-
-    // Calculate the cell edge distances
-    /*{
-        auto l1 = LAMBDA(T_indexType ix)
-        {
-            T_indexType ixm = ix - 1;
-            data.dxb(ix) = (data.xb(ix) - data.xb(ixm));
-        };
-        portableWrapper::applyKernel(l1, portableWrapper::Range(-1, data.nx + 2));
-        auto l2 = LAMBDA(T_indexType iy)
-        {
-            T_indexType iym = iy - 1;
-            data.dyb(iy) = (data.yb(iy) - data.yb(iym));
-        };
-        portableWrapper::applyKernel(l2, portableWrapper::Range(-1, data.ny + 2));
-        auto l3 = LAMBDA(T_indexType iz)
-        {
-            T_indexType izm = iz - 1;
-            data.dzb(iz) = (data.zb(iz) - data.zb(izm));
-        };
-        portableWrapper::applyKernel(l3, portableWrapper::Range(-1, data.nz + 2));
-        portableWrapper::fence();
-    }
-
-    // Calculate the cell centre distances
-    {
-        auto l1 = LAMBDA(T_indexType ix)
-        {
-            T_indexType ixm = ix - 1;
-            data.dxc(ixm) = (data.xc(ix) - data.xc(ixm));
-        };
-        portableWrapper::applyKernel(l1, portableWrapper::Range(0, data.nx + 2));
-        auto l2 = LAMBDA(T_indexType iy)
-        {
-            T_indexType iym = iy - 1;
-            data.dyc(iym) = (data.yc(iy) - data.yc(iym));
-        };
-        portableWrapper::applyKernel(l2, portableWrapper::Range(0, data.ny + 2));
-        auto l3 = LAMBDA(T_indexType iz)
-        {
-            T_indexType izm = iz - 1;
-            data.dzc(izm) = (data.zc(iz) - data.zc(izm));
-        };
-        portableWrapper::applyKernel(l3, portableWrapper::Range(0, data.nz + 2));
-        portableWrapper::fence();
-    }*/
-
-    /*portableWrapper::assign(data.dxb, data.dx);
-    portableWrapper::assign(data.dyb, data.dy);
-    portableWrapper::assign(data.dzb, data.dz);
-    */
-    /*portableWrapper::assign(data.dxc, data.dx);
-    portableWrapper::assign(data.dyc, data.dy);
-    portableWrapper::assign(data.dzc, data.dz);*/
-    portableWrapper::fence();
-
+    //The grid axes are already filled, just need to set up the metric terms
     if (data.geometry == geometryType::Cartesian)
     {
         portableWrapper::assign(data.hy, 1.0);

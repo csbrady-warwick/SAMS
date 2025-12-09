@@ -41,7 +41,7 @@ namespace SAMS {
         MPIManager<MPI_DECOMPOSITION_RANK>&mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
 
         std::array<dimension, MAX_RANK> dimensions;
-        typeID varType;
+        typeHandle varType;
         MPI_Datatype mpiType;
         MPI_Datatype mpiSend[2*MAX_RANK]; //Array of MPI_Datatypes for sending in each dimension (lower and upper)
         MPI_Datatype mpiRecv[2*MAX_RANK]; //Array of MPI_Datatypes for receiving in each dimension (lower and upper)
@@ -111,10 +111,10 @@ namespace SAMS {
     /**
      * Constructor
      * @param rank The rank of the variable (1-MAX_RANK)
-     * @param varType The type of the variable (typeID)
+     * @param varType The type of the variable (typeHandle)
      * @param memSpace The memory space of the variable (memorySpace)
      */
-        variableDef(int rank, typeID varType, memorySpace memSpace)
+        variableDef(int rank, typeHandle varType, memorySpace memSpace)
             : varType(varType), rank(rank), memSpace(memSpace) {
             mpiType = gettypeRegistry().getMPIType(varType);
             if(rank<1 || rank>MAX_RANK){
@@ -124,7 +124,7 @@ namespace SAMS {
         }
 
         template<typename... Args>
-        variableDef(typeID varType, memorySpace memSpace, Args... args)
+        variableDef(typeHandle varType, memorySpace memSpace, Args... args)
             : variableDef(sizeof...(args), varType, memSpace) {
             static_assert(sizeof...(args) <= MAX_RANK, "Error: variableDef rank exceeds MAX_RANK");
             setDimensions<0>(args...);
@@ -261,10 +261,48 @@ namespace SAMS {
             mpiMgr.haloExchange(dataPtr, rank, mpiSend, mpiRecv);
         }
 
+        void haloExchange(int axis){
+            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
+            mpiMgr.haloExchange(dataPtr, rank, mpiSend, mpiRecv, axis);
+        }
+
+        void haloExchange(std::string axisName){
+            auto &axisReg = getaxisRegistry();
+            int axis = axisReg.getMPIAxis(axisName);
+            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
+            mpiMgr.haloExchange(dataPtr, rank, mpiSend, mpiRecv, axis);
+        }
+
+        void haloExchange(int axis, SAMS::domain::edges edgeType){
+            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
+            mpiMgr.haloExchange(dataPtr, rank, mpiSend, mpiRecv, axis, edgeType);
+        }
+
+        void haloExchange(std::string axisName, SAMS::domain::edges edgeType){
+            auto &axisReg = getaxisRegistry();
+            int axis = axisReg.getMPIAxis(axisName);
+            MPIManager<MPI_DECOMPOSITION_RANK> &mpiMgr = getMPIManager<MPI_DECOMPOSITION_RANK>();
+            mpiMgr.haloExchange(dataPtr, rank, mpiSend, mpiRecv, axis, edgeType);
+        }
+
+        void haloExchange(SAMS::MPIManager<MPI_DECOMPOSITION_RANK>& customMPIManager){
+            customMPIManager.haloExchange(dataPtr, rank, mpiSend, mpiRecv);
+        }
+
+
+
         /**
          * Get a pointer to the data
          */
-        void* getDataPtr() const {
+        template<typename T>
+        T* getDataPtr() const {
+            return static_cast<T*>(dataPtr);
+        }
+
+        /**
+         * Get a pointer to data using the normal STL function name
+         */
+        void* data() const {
             return dataPtr;
         }
 
@@ -278,7 +316,7 @@ namespace SAMS {
         /**
          * Get the type of the variable
          */
-        typeID getType() const {
+        typeHandle getType() const {
             return varType;
         }
 
@@ -335,7 +373,7 @@ namespace SAMS {
          * @return The portable array
          */
         template<typename T, int Arank , portableWrapper::arrayTags tag>
-        portableWrapper::portableArray<T, Arank, tag> buildPPArray() const {
+        portableWrapper::portableArray<T, Arank, tag> getPPArray() const {
             portableWrapper::portableArray<T, Arank, tag> array;
             fillPPArray(array);
             return array;
@@ -343,7 +381,7 @@ namespace SAMS {
 
         template<typename T, int Arank , portableWrapper::arrayTags tag>
         operator portableWrapper::portableArray<T, Arank, tag>() const {
-            return buildPPArray<T, Arank, tag>();
+            return getPPArray<T, Arank, tag>();
         }
 
     };

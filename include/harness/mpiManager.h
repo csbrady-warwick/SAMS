@@ -20,18 +20,13 @@ namespace SAMS
 
     namespace MPI{
 
-        enum class edges
-        {
-            LOWER=0,
-            UPPER=1
-        };
-
         namespace{
 
             //Singleton map of MPIManager instances
             template<int Dims>
-            inline std::unordered_map<MPI_Comm, MPIManager<Dims>> &getInstanceMap(){
-                static std::unordered_map<MPI_Comm, MPIManager<Dims>> instances;
+            inline std::unordered_map<MPI_Fint, MPIManager<Dims>> &getInstanceMap(){
+                static std::unordered_map<MPI_Fint, MPIManager<Dims>> instances;
+                static bool firstTime = true;
                 return instances;
             }
 
@@ -54,21 +49,14 @@ namespace SAMS
             };
 
             #endif
-        }
 
-        #ifdef USE_MPI
-            //Create a map from MPI_Order_* to a string for error messages
-            inline static std::map<int, std::string> mpiOrderMap = {
-                {MPI_ORDER_C, "MPI_ORDER_C"},
-                {MPI_ORDER_FORTRAN, "MPI_ORDER_FORTRAN"}
-            };
-        #endif
+        }
 
 
         inline void initialize(int *argc, char ***argv)
         {
-            int rank=0;
             #ifdef USE_MPI
+            int rank = 0;
             //Create a map from MPI_THREAD_* to a string for error messages
             std::map<int, std::string> threadLevelMap = {
                 {MPI_THREAD_SINGLE, "MPI_THREAD_SINGLE"},
@@ -143,6 +131,26 @@ namespace SAMS
     static const int Dims = i_Dims;
     private:
 
+        #ifdef USE_MPI
+          //Create a map from an integer to an MPI combiner type string for naming purposes
+          inline static std::map<int, std::string> mpiCombinerMap = {
+              {MPI_COMBINER_NAMED, "MPI_COMBINER_NAMED"},
+              {MPI_COMBINER_DUP, "MPI_COMBINER_DUP"},
+              {MPI_COMBINER_CONTIGUOUS, "MPI_COMBINER_CONTIGUOUS"},
+              {MPI_COMBINER_VECTOR, "MPI_COMBINER_VECTOR"},
+              {MPI_COMBINER_HVECTOR, "MPI_COMBINER_HVECTOR"},
+              {MPI_COMBINER_INDEXED, "MPI_COMBINER_INDEXED"},
+              {MPI_COMBINER_HINDEXED, "MPI_COMBINER_HINDEXED"},
+              {MPI_COMBINER_STRUCT, "MPI_COMBINER_STRUCT"},
+              {MPI_COMBINER_SUBARRAY, "MPI_COMBINER_SUBARRAY"},
+              {MPI_COMBINER_DARRAY, "MPI_COMBINER_DARRAY"},
+              {MPI_COMBINER_F90_REAL, "MPI_COMBINER_F90_REAL"},
+              {MPI_COMBINER_F90_COMPLEX, "MPI_COMBINER_F90_COMPLEX"},
+              {MPI_COMBINER_F90_INTEGER, "MPI_COMBINER_F90_INTEGER"},
+              {MPI_COMBINER_RESIZED, "MPI_COMBINER_RESIZED"}
+          };
+          #endif
+
 #ifdef MPI_ERRORS_RETURN
 #define checkMPIError(fn) checkMPIErrorCore(fn, __FILE__, __LINE__)
         inline void checkMPIErrorCore(int errcode, const char *file, int line)
@@ -210,135 +218,26 @@ namespace SAMS
         }
 
         /**
-         * Type defining the information required to uniquely identify or construct an MPI subarray datatype
-         */
-        struct MPISubarrayInfo
-        {
-            MPI_Datatype basetype;
-            int rank;
-            int starts[MAX_RANK]={};
-            int subsizes[MAX_RANK]={};
-            int sizes[MAX_RANK]={};
-            int layout = MPI_ORDER_C;
-            std::string Name="";
-
-            /**
-             * Default constructor initializing all values to zero
-             */
-            MPISubarrayInfo(){
-                for (int i = 0; i < MAX_RANK; i++){
-                    starts[i] = 0;
-                    subsizes[i] = 0;
-                    sizes[i] = 0;
-                }
-            }
-
-            void buildName(){
-                #ifdef USE_MPI
-                Name = "Subarray_type(" + gettypeRegistry().getTypeName(basetype) + ")" +
-                       "_rank(" + std::to_string(rank) + ")" +
-                       "_layout(" + SAMS::MPI::mpiOrderMap[layout] + ")_s(";
-                for (int i = 0; i < rank; i++){
-                    Name += std::to_string(starts[i]);
-                    if (i < rank - 1){
-                        Name += ",";
-                    }
-                }
-                Name += ")_ss(";
-                for (int i = 0; i < rank; i++){
-                    Name += std::to_string(subsizes[i]);
-                    if (i < rank - 1){
-                        Name += ",";
-                    }
-                }
-                Name += ")_sz(";
-                for (int i = 0; i < rank; i++){
-                    Name += std::to_string(sizes[i]);
-                    if (i < rank - 1){
-                        Name += ",";
-                    }
-                }
-                Name += ")";
-                #else
-                Name = "MPI not enabled! Seeing this is an error.";
-                #endif
-            }
-
-            /**
-             * Constructor from arrays
-             */
-            template<int N>
-            MPISubarrayInfo(MPI_Datatype base, const std::array<int, N>& startArr, const std::array<int, N>& subsizeArr, const std::array<int, N>& sizeArr, int order = MPI_ORDER_C)
-                : basetype(base), rank(N), layout(order)
-            {
-                static_assert(N <= MAX_RANK, "Error: Rank exceeds MAX_RANK in MPISubarrayInfo constructor\n");
-                for (int i = 0; i < N; i++){
-                    starts[i] = startArr[i];
-                    subsizes[i] = subsizeArr[i];
-                    sizes[i] = sizeArr[i];
-                }
-                buildName();
-            }
-
-            /**
-             * Construct from C-style arrays
-             */
-            MPISubarrayInfo(MPI_Datatype base, const int* startArr, const int* subsizeArr, const int* sizeArr, int nRank,  int order = MPI_ORDER_C)
-                : basetype(base), rank(nRank), layout(order)
-            {
-                if (nRank > MAX_RANK){
-                    throw std::runtime_error("Error: Rank exceeds MAX_RANK in MPISubarrayInfo constructor\n");
-                }
-                for (int i = 0; i < nRank; i++){
-                    starts[i] = startArr[i];
-                    subsizes[i] = subsizeArr[i];
-                    sizes[i] = sizeArr[i];
-                }
-                buildName();
-            }
-
-            /**
-             * Comparator for use in map keys
-             * @param other The other MPISubarrayInfo to compare against
-             * @return true if this is less than other
-             */
-            bool operator<(const MPISubarrayInfo& other) const
-            {
-                if (basetype != other.basetype)
-                {
-                    //This are potentially opaque types, so we compare the raw bytes
-                    uint64_t t1, t2;
-                    std::size_t n = (sizeof(t1) < sizeof(basetype)) ? sizeof(t1) : sizeof(basetype);
-                    std::memcpy(&t1, &basetype, n);
-                    std::memcpy(&t2, &other.basetype, n);
-                    return t1 < t2;
-                }
-                if (rank != other.rank)
-                    return rank < other.rank;
-                if (layout != other.layout)
-                    return layout < other.layout;
-                for (int i = 0; i < rank; i++)
-                {
-                    if (starts[i] != other.starts[i])
-                        return starts[i] < other.starts[i];
-                    if (subsizes[i] != other.subsizes[i])
-                        return subsizes[i] < other.subsizes[i];
-                    if (sizes[i] != other.sizes[i])
-                        return sizes[i] < other.sizes[i];
-                }
-                return false; //They are equal
-            }
-        };
-
-
-        /**
          * Type to hold an MPI_Datatype along with a reference count for shared usage
+         * Deletes the type when the reference count reaches zero or when forced to delete
          */
         struct MPITypeHolder
         {
             COUNT_TYPE refCount=1;
             MPI_Datatype mpiType = MPI_DATATYPE_NULL;
-            std::string Name="";
+            std::string Name=""; //Name here is just used for debug output
+
+            /*
+            * Release the MPI_Datatype
+            */
+            void releaseType(){
+            #ifdef USE_MPI
+                if (mpiType != MPI_DATATYPE_NULL){
+                    SAMS::debugAll3 << "Releasing MPI type in destructor " << Name << std::endl;
+                    MPI_Type_free(&mpiType);
+                }
+            #endif
+            }
 
             //Delete default constructor and copy operations to avoid accidental copies
             MPITypeHolder() = delete;
@@ -347,7 +246,7 @@ namespace SAMS
 
             //Move constructor to allow "normal" operation in containers
             MPITypeHolder(MPITypeHolder &&other) noexcept
-                : refCount(other.refCount), mpiType(other.mpiType)
+                : refCount(other.refCount), mpiType(other.mpiType), Name(std::move(other.Name))
             {
                 other.mpiType = MPI_DATATYPE_NULL;
                 other.refCount = 0;
@@ -364,7 +263,7 @@ namespace SAMS
             MPITypeHolder(MPI_Datatype type)
                 : mpiType(type) {}
 
-            MPITypeHolder(MPI_Datatype type, std::string name)
+            MPITypeHolder(MPI_Datatype type, const std::string &name)
                 : mpiType(type), Name(name) {}
 
             /**
@@ -374,38 +273,10 @@ namespace SAMS
                 releaseType();
             }
 
-            /*
-            * Release the MPI_Datatype
-            */
-            void releaseType(){
-            #ifdef USE_MPI
-                if (mpiType != MPI_DATATYPE_NULL){
-                    SAMS::debugAll3 << "Releasing MPI type " << Name << std::endl;
-                    MPI_Type_free(&mpiType);
-                }
-            #endif
-            }
-
             /**
-             * Increment the reference count
+             * Decrement the reference count and return the new value
              */
-            COUNT_TYPE operator++(){
-                return ++refCount;
-            }
-
-            /**
-             * Post increment the reference count
-             */
-            COUNT_TYPE operator++(int){
-                COUNT_TYPE oldCount = refCount;
-                refCount++;
-                return oldCount;
-            }
-
-            /**
-             * Decrement the reference count and release the type if it reaches zero
-             */
-            COUNT_TYPE operator--(){
+            COUNT_TYPE decRef(){
                 refCount--;
                 if (refCount == 0){
                     releaseType();
@@ -414,17 +285,16 @@ namespace SAMS
             }
 
             /**
-             * Decrement refrence count for post decrement
+             * Increment the reference count
              */
-            COUNT_TYPE operator--(int){
-                COUNT_TYPE oldCount = refCount;
-                refCount--;
-                if (refCount == 0){
-                    releaseType();
-                }
-                return oldCount;
+            COUNT_TYPE incRef(){
+                refCount++;
+                return refCount;
             }
 
+            /**
+             * Get the current reference count
+             */
             COUNT_TYPE getRefCount() const {
                 return refCount;
             }
@@ -438,109 +308,271 @@ namespace SAMS
         };
 
         /**
-         * Because there are no requirements on the type of MPI_Datatype, we have to use another struct to store reverse mapping information
-         */
-        struct MPIReverseInfo
-        {
-            MPI_Datatype mpiType = MPI_DATATYPE_NULL;
-
-            //Comparator used for map
-            bool operator<(const MPIReverseInfo& other) const
-            {
-                //Again could be an opaque type, so we compare the raw bytes
-                uint64_t t1, t2;
-                std::size_t n = (sizeof(t1) < sizeof(mpiType)) ? sizeof(t1) : sizeof(mpiType);
-                std::memcpy(&t1, &mpiType, n);
-                std::memcpy(&t2, &other.mpiType, n);
-                return t1 < t2;
-            }
-        };
-
-        /**
          * Cache of created MPI_Datatype objects for subarrays
          */
-        std::map<MPISubarrayInfo, MPITypeHolder> mpiSubarrayTypeCache;
+        std::map<std::string, MPITypeHolder> mpiSubarrayTypeCache;
 
         /**
-         * Reverse cache to find MPISubarrayInfo from MPI_Datatype
-         * Used when freeing MPI_Datatype objects
-         * Map used rather than unordered_map to avoid
-         * having to deal with possible destruction/copying
-         * of the MPI_Datatype keys on adding new keys
-         * Yes. I know that I've used deleted copy constructors
-         * elsewhere to avoid this, but this is simpler for now. 
-        */
-        std::map<MPIReverseInfo, MPISubarrayInfo> mpiReverseTypeCache;
-
-
-        /** Function to create an MPI type from an MPISubarrayInfo type 
-         * @param info The MPISubarrayInfo structure defining the MPI subarray type
-         * @return The created MPI_Datatype
-        */
-        MPI_Datatype createMPISubarrayType(const MPISubarrayInfo &info)
+         * Get a forward cache entry and return the MPI_Datatype. Increment the reference count if the "incRef" parameter is true
+         * @param Name The name of the MPI_Datatype to look up
+         * @param incRef Whether to increment the reference count of the found MPI_Datatype (default false)
+         * @return The found MPI_Datatype, or MPI_DATATYPE_NULL if not found
+         */
+        MPI_Datatype getCacheEntry(const std::string &Name, bool incRef=false)
         {
             #ifdef USE_MPI
-            //If type already in cache, return existing type
-            auto it = mpiSubarrayTypeCache.find(info);
+            auto it = mpiSubarrayTypeCache.find(Name);
             if (it != mpiSubarrayTypeCache.end())
             {
-                SAMS::debugAll3<< "Found existing MPI subarray type: " << info.Name << std::endl;
+                SAMS::debugAll3 << "Found MPI type in cache: " << Name << " with refCount " << it->second.getRefCount() << std::endl;
+                if (incRef){
+                    it->second.incRef();
+                }
                 return it->second.mpiType;
             }
-            //Otherwise create new type
-            MPI_Datatype newType;
-            checkMPIError(MPI_Type_create_subarray(
-                info.rank,
-                info.sizes,
-                info.subsizes,
-                info.starts,
-                info.layout, 
-                info.basetype,
-                &newType));
-            checkMPIError(MPI_Type_commit(&newType));
+            #endif
+            return MPI_DATATYPE_NULL;
+        }
 
-            //Add to forward cache
-            mpiSubarrayTypeCache.emplace(info, newType);
-            auto& typeHolder = mpiSubarrayTypeCache.at(info);
-            typeHolder.Name = info.Name;
-            SAMS::debugAll3 << "Created new MPI subarray type: " << info.Name << std::endl;
-            //Also add to reverse cache
-            MPIReverseInfo revInfo;
-            revInfo.mpiType = newType;
-            mpiReverseTypeCache[revInfo] = info;
-            return newType;
+        /**
+         * Use MPI_type_get_envelope and MPI_Type_get_contents to get the name of a built in MPI_Datatype
+         * @param mpiType The MPI_Datatype to get the name of
+         * @return The name of the MPI_Datatype, or empty string if not found
+         */
+        std::string buildMPIGenericName(MPI_Datatype mpiType)
+        {
+            #ifdef USE_MPI
+            int nints, nadds, ntypes, combiner;
+            checkMPIError(MPI_Type_get_envelope(mpiType, &nints, &nadds, &ntypes, &combiner));
+            std::vector<int> array_of_integers(nints);
+            std::vector<MPI_Aint> array_of_addresses(nadds);
+            std::vector<MPI_Datatype> array_of_types(ntypes);
+            //If our type is a built in type, just return its name
+            if (combiner == MPI_COMBINER_NAMED || (nints==0 && nadds==0 && ntypes==0)){
+                //This is a built in type
+                char name[MPI_MAX_OBJECT_NAME];
+                int resultlen;
+                checkMPIError(MPI_Type_get_name(mpiType, name, &resultlen));
+                return std::string(name, resultlen);
+            }
+            //Type is a derived type so generate a contents
+            checkMPIError(MPI_Type_get_contents(mpiType, nints, nadds, ntypes,
+                                               array_of_integers.data(),
+                                               array_of_addresses.data(),
+                                               array_of_types.data()));
+            //Check if we have a known combiner
+            std::string combinerName;
+            auto combIt = mpiCombinerMap.find(combiner);
+            if (combIt == mpiCombinerMap.end()){
+                combinerName = "MPI_COMBINER_UNKNOWN(" + std::to_string(combiner) + ")";
+            } else {
+                combinerName = combIt->second;
+            }
+            //Build a name based on the combiner and contents
+            std::string Name = "MPI_Generic_type_combiner(" + combinerName + ")_ints(";
+            for (int i = 0; i < nints; i++){
+                Name += std::to_string(array_of_integers[i]);
+                if (i < nints - 1){
+                    Name += ",";
+                }
+            }
+            Name += ")_addr(";
+            for (int i = 0; i < nadds; i++){
+                Name += std::to_string(array_of_addresses[i]);
+                if (i < nadds - 1){
+                    Name += ",";
+                }
+            }
+            Name += ")_types(";
+            for (int i = 0; i < ntypes; i++){
+                //Convert MPI_Datatype to type name
+                Name += buildMPIGenericName(array_of_types[i]);
+                if (i < ntypes - 1){
+                    Name += ",";
+                }
+            }
+            Name += ")";
+            return Name;
+            #else
+            return "";
+            #endif
+        }
+
+        /**
+         * Use the built in MPI_Type_set_name to set the name of an MPI_Datatype
+         * @param mpiType The MPI_Datatype to name
+         * @param name The name to set
+         */
+        void setMPITypeName(MPI_Datatype mpiType, const std::string &name)
+        {
+            #ifdef USE_MPI
+            //Check if the string is later than MPI_MAX_OBJECT_NAME
+            char truncatedName[MPI_MAX_OBJECT_NAME];
+            std::strncpy(truncatedName, name.c_str(), MPI_MAX_OBJECT_NAME-1);
+            //Always null terminating is quicker than checking length first
+            truncatedName[MPI_MAX_OBJECT_NAME-1] = '\0';
+            checkMPIError(MPI_Type_set_name(mpiType, name.c_str()));
+            #endif
+        }
+
+
+        /**
+         * Create an MPI datatype for a slice of a variable defined without the use of any harness objects
+         * @param rank The rank of the variable
+         * @param domainLB Array of size rank specifying the global lower bounds of the variable
+         * @param domainUB Array of size rank specifying the global upper bounds of the variable
+         * @param LB Array of size rank specifying the lower bounds of the slice
+         * @param UB Array of size rank specifying the upper bounds of the slice
+         * @param baseType The base MPI_Datatype of the variable
+         */
+        MPI_Datatype createArraySliceType(int rank, SIGNED_INDEX_TYPE *domainLB, SIGNED_INDEX_TYPE *domainUB, SIGNED_INDEX_TYPE *LB, SIGNED_INDEX_TYPE *UB, MPI_Datatype baseType){
+            #ifdef USE_MPI
+            int starts[MAX_RANK], sizes[MAX_RANK], subsizes[MAX_RANK];
+            for (int i = 0; i < rank; i++)
+            {
+                sizes[i] = domainUB[i] - domainLB[i]+1;
+                subsizes[i] = UB[i] - LB[i] + 1;
+                starts[i] = LB[i] - domainLB[i];
+            }
+            //Add the type to the cache or get existing type
+            return createMPISubarrayType(rank, sizes, subsizes, starts, baseType, MPI_ORDER_C);
             #else
             return MPI_DATATYPE_NULL;
             #endif
         }
 
         /**
-         * Delete a specified MPI_Datatype from the caches and free it
+         * Build an MPI datatype for a slice of a variable defined by lower and upper bounds in each dimension
          */
-        void deleteMPISubarrayType(MPI_Datatype mpiType, bool forceDelete = false)
+        MPI_Datatype createArraySliceType(int rank, dimension* dims, SIGNED_INDEX_TYPE *LB, SIGNED_INDEX_TYPE *UB, MPI_Datatype baseType){
+
+            SIGNED_INDEX_TYPE domainLB[MAX_RANK], domainUB[MAX_RANK];
+            for(int i=0; i<rank; i++){
+            domainLB[i] = dims[i].getLocalLB();
+            domainUB[i] = dims[i].getLocalUB();
+            }
+            return createArraySliceType(rank, domainLB, domainUB, LB, UB, baseType);
+
+        }
+
+
+        /**
+         * Delete a specified MPI_Datatype from the caches and free it
+         * @param mpiType The MPI_Datatype to delete
+         * @param forceDelete If true, delete the type even if the reference count is not
+         */
+        bool deleteMPIType(MPI_Datatype mpiType, bool forceDelete = false)
         {
-            MPIReverseInfo revInfo;
-            revInfo.mpiType = mpiType;
-            auto itR = mpiReverseTypeCache.find(revInfo);
-            if (itR != mpiReverseTypeCache.end())
-            {
-                MPISubarrayInfo& info = itR->second;
+            #ifdef USE_MPI
+            try{
+                std::string info = buildMPIGenericName(mpiType);
                 auto itF = mpiSubarrayTypeCache.find(info);
                 MPITypeHolder& typeHolder = itF->second;
-
-                //The -- operator has the normal pre and post decrement behaviour
-                //So need predecrement here to get the correct value
-                COUNT_TYPE newRefCount = --typeHolder;
+                COUNT_TYPE newRefCount = typeHolder.decRef();
                 if ((newRefCount == 0) || forceDelete){
-                    SAMS::debugAll3 << "Releasing MPI subarray type: " << info.Name << std::endl;
+                    SAMS::debugAll3 << "Releasing MPI subarray type: " << info << std::endl;
                     //Delete it from the forward cache
-                    mpiReverseTypeCache.erase(itR);
                     mpiSubarrayTypeCache.erase(itF);
+                    return true;
                 } else {
-                    SAMS::debugAll3 << "Decremented reference count for MPI subarray type: " << info.Name << " to " << newRefCount << std::endl;
+                    SAMS::debugAll3 << "Decremented reference count for MPI type: " << info << " to " << newRefCount << std::endl;
+                    return false;
                 }
-                //MPI_Type_free is called in the destructor of MPIReverseInfo
+                //MPI_Type_free is called in the destructor of MPITypeHolder
+            } catch (const std::runtime_error& e){
+                SAMS::debugAll3 << "*** WARNING *** Freeing unregistered MPI type!. Type is freed, but this is probably an error." << std::endl;
+                MPI_Type_free(&mpiType); //Just free it directly
+                return true;
             }
+            #else
+            return true;
+            #endif
+        }
+
+
+        void registerMPIType(MPI_Datatype mpiType, const std::string &name)
+        {
+            #ifdef USE_MPI
+            mpiSubarrayTypeCache.emplace(name, MPITypeHolder(mpiType, name));
+            setMPITypeName(mpiType, name);
+            SAMS::debugAll3 << "Registered new MPI type: " << name << std::endl;
+            #endif
+        }
+
+        MPI_Datatype checkoutCore(const std::string &typeName)
+        {
+            #ifdef USE_MPI
+            auto it = mpiSubarrayTypeCache.find(typeName);
+            if (it != mpiSubarrayTypeCache.end())
+            {
+                it->second.incRef();
+                SAMS::debugAll3 << "Checked out existing MPI type: " << typeName << " with new reference count " << it->second.getRefCount() << std::endl;
+                return it->second.mpiType;
+            }
+            else
+            {
+                throw std::runtime_error("Error: MPI_Datatype " + typeName + " not found in MPIManager cache");
+            }
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
+        }
+
+
+        /**
+         * Class to extract member pointer traits
+         * @tparam M The member pointer type
+         */
+        template<typename M> struct memberPointerTraits;
+        /**
+         * Specialisation of memberPointerTraits for member pointers
+         * @tparam C The class type
+         * @tparam M The member type
+         * classType is the class that the type is a member of
+         * memberType is the type of the member
+         */
+        template<typename C, typename M>
+        struct memberPointerTraits<M C::*>
+        {
+            using classType  = C;
+            using memberType = M;
+        };
+
+        template<int level=0, typename T_classIn, int N, auto c, auto... o>
+        void buildTypeFromMemberPointers(T_classIn *base, std::array<int, N> &blocklengths, std::array<MPI_Aint, N> &displacements, std::array<MPI_Datatype, N> &types)
+        {
+            //First set the type from the type registry
+            using MemberType = memberPointerTraits<decltype(c)>::memberType;
+            //Member must be trivially copyable to be used in MPI communication
+            static_assert(std::is_trivially_copyable<MemberType>::value, "Error: Member type must be trivially copyable to create MPI datatype");
+            types[level] = gettypeRegistry().getMPIType<MemberType>();
+            //Get blocklenght by comparing sizeof member type to the size of the MPI type
+            size_t memberSize = sizeof(MemberType);
+            size_t mpiTypeSize = gettypeRegistry().getSize<MemberType>();
+            blocklengths[level] = static_cast<int>(memberSize / mpiTypeSize);
+            //Can't use offsetof, but use a nullptr cast to the class type to get the member address
+            MPI_Aint memberAddress = static_cast<MPI_Aint>(reinterpret_cast<char*>(&(base->*c)) - reinterpret_cast<char*>(base));
+            displacements[level] = memberAddress;
+
+            //Recurse if we have more members
+            if constexpr(sizeof...(o) > 0){
+                buildTypeFromMemberPointers<level+1, T_classIn, N, o...>(base, blocklengths, displacements, types);
+            }
+        }
+
+
+        MPI_Datatype cacheType(MPI_Datatype newType){
+            std::string Name = buildMPIGenericName(newType);
+            //If type already in cache, return existing type
+            MPI_Datatype existingType = getCacheEntry(Name, true);
+            if (existingType != MPI_DATATYPE_NULL) {
+                checkMPIError(MPI_Type_free(&newType)); //Free the newly created type as we are returning existing one
+                return existingType;
+            }
+            //Otherwise create new type
+            checkMPIError(MPI_Type_commit(&newType));
+            registerMPIType(newType, Name);
+            return newType;
         }
 
     public:
@@ -554,6 +586,11 @@ namespace SAMS
         void setDecomposition(const std::array<int, Dims> &decomposition, const std::array<bool, N> &isPeriodic)
         {
             static_assert(N <= MAX_RANK, "Error: isPeriodic array size exceeds MAX_RANK");
+            //Always want periodic domain info
+            for (int i = 0; i < N; i++)
+            {
+                periods[i] = isPeriodic[i]? 1 : 0;
+            }
             #ifdef USE_MPI
             int totalProcs = 1;
             bool anyZero = false;
@@ -578,10 +615,6 @@ namespace SAMS
                 SAMS::cout << "Using specified MPI decomposition: " << totalProcs;
             }
             for (int i = 0; i < Dims; i++) totalProcs *= dims[i];
-            for (int i = 0; i < N; i++)
-            {
-                periods[i] = isPeriodic[i]? 1 : 0;
-            }
             //Not really necessary but I do hate it when codes pluralise incorrectly
             if (totalProcs > 1){
                 SAMS::cout << " processors (";
@@ -672,6 +705,8 @@ namespace SAMS
 
         /**
          * Get the Cartesian communicator
+         * Before decomposition this is the communicator passed to the constructor
+         * After decomposition this is the Cartesian communicator
          */
         MPI_Comm getComm() const
         {
@@ -679,8 +714,9 @@ namespace SAMS
         }
 
         /**
-         * Get the coordinates of the current processor in the Cartesian communicator
-         * @return Array of size Dims containing the coordinates
+         * Get the neighbours of this processor in each dimension
+         * @return Array of size Dims*2 containing the ranks of the neighbours in each dimension
+         * Neighbour order is: dim0_lower, dim0_upper, dim1_lower, dim1_upper, ...
          */
         std::array<int, Dims * 2> getNeighbors() const
         {
@@ -688,20 +724,42 @@ namespace SAMS
         }
 
         /**
+         * Get the size of the Cartesian decomposition in each dimension
+         * @return Array of size Dims containing the number of processors in each dimension
+         */
+        std::array<int, Dims> getDims() const
+        {
+            return dims;
+        }
+
+        /**
+         * Get the coordinates of this processor in the Cartesian decomposition
+         * @return Array of size Dims containing the coordinates of this processor
+         */
+        std::array<int, MAX_RANK> getCoords() const
+        {
+            return coords;
+        }
+
+        /**
          * Check if a given axis is at the edge of the decomposition including the effect of periodicity
          */
-        bool isEdge(int axis, bool isLower) const
+        bool isEdge(int axis, SAMS::domain::edges edgeType) const
         {
-            int neighborIndex = axis * 2 + (isLower ? 0 : 1);
+            //Always on an edge if axis is not decomposed
+            if (axis > Dims-1){
+                return true;
+            }
+            int neighborIndex = axis * 2 + (edgeType==SAMS::domain::edges::lower ? 0 : 1);
             return neighbors[neighborIndex] == MPI_PROC_NULL;
         }
 
         /**
          * This detects if you are at the edge of the decomposition WITHOUT considering periodicity
          */
-        bool isEdgeNP(int axis, bool isLower) const
+        bool isEdgeNP(int axis, SAMS::domain::edges edgeType) const
         {
-            if (isLower){
+            if (edgeType == SAMS::domain::edges::lower) {
                 return coords[axis] == 0;
             } else {
                 return coords[axis] == dims[axis]-1;
@@ -740,6 +798,10 @@ namespace SAMS
             }
             getaxisRegistry().setLocalDomainElements(axisName, localElements, staggerType::CENTRED);
 
+            if (axis < 0){
+                //Axis is not decomposed so nothing more to do
+                return;
+            }
             //Now set part of the global axis that is on this processor
             size_t localLB = 0;
             for(int i=0; i<coords[axis]; i++){
@@ -754,50 +816,297 @@ namespace SAMS
             size_t localUB = localLB + localElements;
             auto &axisRef = getaxisRegistry().getAxis(axisName);
             axisRef.dim.setGlobalBounds(localLB, localUB);
+            //axisRef.dim.setPeriodic(periods[axis] != 0);
         }
 
         /**
-         * Create an MPI datatype for a slice of a variable defined without the use of any harness objects
-         * @param rank The rank of the variable
-         * @param domainLB Array of size rank specifying the global lower bounds of the variable
-         * @param domainUB Array of size rank specifying the global upper bounds of the variable
-         * @param LB Array of size rank specifying the lower bounds of the slice
-         * @param UB Array of size rank specifying the upper bounds of the slice
-         * @param baseType The base MPI_Datatype of the variable
+         * Create an MPI subarray type for a specified set of sizes, subsizes and starts. Caches created types to avoid duplication
+         * @param rank The rank of the subarray
+         * @param sizes Array of sizes of the full array
+         * @param subsizes Array of sizes of the subarray
+         * @param starts Array of starting indices of the subarray
+         * @param baseType The base MPI_Datatype
+         * @param layout The layout of the array (default MPI_ORDER_C)
          */
-        MPI_Datatype variableSliceType(int rank, SIGNED_INDEX_TYPE *domainLB, SIGNED_INDEX_TYPE *domainUB, SIGNED_INDEX_TYPE *LB, SIGNED_INDEX_TYPE *UB, MPI_Datatype baseType){
+        MPI_Datatype createMPISubarrayType(int rank, const int* sizes, const int* subsizes, const int* starts, MPI_Datatype baseType, int layout=MPI_ORDER_C)
+        {
             #ifdef USE_MPI
-            int starts[MAX_RANK], sizes[MAX_RANK], subsizes[MAX_RANK];
-            for (int i = 0; i < rank; i++)
-            {
-                sizes[i] = domainUB[i] - domainLB[i]+1;
-                subsizes[i] = UB[i] - LB[i] + 1;
-                starts[i] = LB[i] - domainLB[i];
-            }
-
-            MPI_Datatype sliceType;
-
-            //Add the type to the cache or get existing type
-            sliceType = createMPISubarrayType(MPISubarrayInfo(baseType, starts, subsizes, sizes, rank));
-
-            return sliceType;
+            MPI_Datatype newType;
+            checkMPIError(MPI_Type_create_subarray(
+                rank,
+                sizes,
+                subsizes,
+                starts,
+                layout, 
+                baseType,
+                &newType));
+                return cacheType(newType);
             #else
             return MPI_DATATYPE_NULL;
             #endif
         }
 
         /**
-         * Build an MPI datatype for a slice of a variable defined by lower and upper bounds in each dimension
+         * Create an MPI subarray type for a specified set of sizes, subsizes and starts. Caches created types to avoid duplication. Takes std::array inputs rather than raw pointers
+         * @param sizes Array of sizes of the full array
+         * @param subsizes Array of sizes of the subarray
+         * @param starts Array of starting indices of the subarray
+         * @param baseType The base MPI_Datatype
+         * @param layout The layout of the array (default MPI_ORDER_C)
          */
-        MPI_Datatype variableSliceType(int rank, dimension* dims, SIGNED_INDEX_TYPE *LB, SIGNED_INDEX_TYPE *UB, MPI_Datatype baseType){
+        template<int N>
+        MPI_Datatype createMPISubarrayType(const std::array<int,N> &sizes, const std::array<int,N> &subsizes, const std::array<int,N> &starts, MPI_Datatype baseType, int layout=MPI_ORDER_C)
+        {
+            #ifdef USE_MPI
+            return createMPISubarrayType(N, sizes.data(), subsizes.data(), starts.data(), baseType, layout);
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
+        }
 
-            SIGNED_INDEX_TYPE domainLB[MAX_RANK], domainUB[MAX_RANK];
-            for(int i=0; i<rank; i++){
-            domainLB[i] = dims[i].getLocalLB();
-            domainUB[i] = dims[i].getLocalUB();
+        /**
+         * Build an MPI datatype for a slice of a portableArray variable defined by lower and upper bounds in each dimension
+         * @param arrayVar The portableArray variable to create the slice type for
+         * @param ranges portableWrapper::range objects defining the lower and upper bounds in each dimension
+         */
+        template<typename T, int rank, portableWrapper::arrayTags tag, typename... T_Ranges>
+        MPI_Datatype createArraySliceType(portableWrapper::portableArray<T, rank, tag> &arrayVar, T_Ranges... ranges)
+        {
+            #ifdef USE_MPI
+            static_assert(sizeof...(ranges) == rank, "Error: Number of ranges must match array rank");
+            if (!arrayVar.isContiguous()){
+                throw std::runtime_error("Error: Cannot create MPI datatype for non-contiguous portableArray");
             }
-            return variableSliceType(rank, domainLB, domainUB, LB, UB, baseType);
+            SIGNED_INDEX_TYPE LB[MAX_RANK], UB[MAX_RANK];
+            std::array<portableWrapper::Range, rank> rangeArray = {ranges...};
+            for (int i = 0; i < rank; i++)
+            {
+                LB[i] = rangeArray[i].lower_bound;
+                UB[i] = rangeArray[i].upper_bound;
+            }
+            return createArraySliceType(rank, arrayVar.getLowerBounds(), arrayVar.getUpperBound(), LB, UB, gettypeRegistry().getMPIType<T>());
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
+        }
 
+        /**
+         * Create an MPI_Type_create_struct for a specified set of blocklengths, displacements and types
+         * @param elements The number of elements in the struct
+         * @param array_of_blocklengths Array of blocklengths
+         * @param array_of_displacements Array of displacements
+         * @param array_of_types Array of MPI_Datatypes
+         */
+        
+        MPI_Datatype createMPIStructType(int elements, const int *array_of_blocklengths, const MPI_Aint *array_of_displacements, const MPI_Datatype *array_of_types)
+        {
+            #ifdef USE_MPI
+            MPI_Datatype newType;
+            checkMPIError(MPI_Type_create_struct(
+                elements,
+                array_of_blocklengths,
+                array_of_displacements,
+                array_of_types,
+                &newType));
+                return cacheType(newType);
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
+        }
+
+        /**
+         * Create an MPI_Type_create_struct for a specified set of blocklengths, displacements and types
+         */
+        template<int N>
+        MPI_Datatype createMPIStructType(const std::array<int,N> &array_of_blocklengths, const std::array<MPI_Aint,N> &array_of_displacements, const std::array<MPI_Datatype,N> &array_of_types)
+        {
+            #ifdef USE_MPI
+            return createMPIStructType(N, array_of_blocklengths.data(), array_of_displacements.data(), array_of_types.data());
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
+        }
+
+        /**
+         * Create an MPI_Type_create_struct for a specified class and its members
+         * @tparam T_First The first member pointer
+         * @tparam T_Others The other member pointers
+         */
+        template<auto T_First, auto... T_Others>
+        MPI_Datatype createMPIStructType(){
+            #ifdef USE_MPI
+            constexpr int numMembers = 1 + sizeof...(T_Others);
+            std::array<int, numMembers> blocklengths = {};
+            std::array<MPI_Aint, numMembers> displacements = {};
+            std::array<MPI_Datatype, numMembers> types = {};
+            using classType = typename memberPointerTraits<decltype(T_First)>::classType;
+            static_assert(std::is_standard_layout<classType>::value, "Error: Class type must be standard layout to create MPI struct type");
+            #ifndef STRICT_STANDARDS
+            buildTypeFromMemberPointers<0, classType, numMembers, T_First, T_Others...>(nullptr, blocklengths, displacements, types);
+            #else
+            classType exampleObj; //Per strict standards we can't use nullptr for pointer arithmetic, so create an example object
+            buildTypeFromMemberPointers<0, classType, numMembers, T_First, T_Others...>(exampleObj, blocklengths, displacements, types);
+            #endif
+            return createMPIStructType<numMembers>(blocklengths, displacements, types);
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
+        }
+
+        /**
+         * Create an MPI_Type_create_struct for a specified class and it's members, adding the type to the cache
+         * @tparam T_First The first member pointer
+         * @tparam T_Others The other member pointers
+         * @param typeName The name to assign to the registered type (applies only to the registered type, NOT the MPI_Datatype)
+         * @return The created MPI_Datatype
+         */
+        template<auto T_First, auto... T_Others>
+        std::tuple<SAMS::typeHandle, MPI_Datatype> createAndRegisterMPIStructType(const std::string &typeName){
+            MPI_Datatype newType = createMPIStructType<T_First, T_Others...>();
+            SAMS::typeHandle handle = gettypeRegistry().registerType<typename memberPointerTraits<decltype(T_First)>::classType>(typeName, newType);
+            return std::make_tuple(handle, newType);
+        }
+
+        /**
+         * Create an MPI_Type_create_struct for a specified class and it's members, adding the type to the cache. Generate the name using demangling
+         * @tparam T_First The first member pointer
+         * @tparam T_Others The other member pointers
+         * @return The created MPI_Datatype
+         */
+        template<auto T_First, auto... T_Others>
+        std::tuple<SAMS::typeHandle, MPI_Datatype> createAndRegisterMPIStructType(){
+            using classType = typename memberPointerTraits<decltype(T_First)>::classType;
+            MPI_Datatype newType = createMPIStructType<T_First, T_Others...>();
+            SAMS::typeHandle handle = gettypeRegistry().registerType<classType>(newType);
+            return std::make_tuple(handle, newType);
+        }
+
+        /**
+         * Create an MPI_Type_contiguous type for a specified base type and count
+         * @param count The number of elements in the contiguous type
+         * @param baseType The base MPI_Datatype
+         */
+        MPI_Datatype createMPIContiguousType(int count, MPI_Datatype baseType)
+        {
+            #ifdef USE_MPI
+            MPI_Datatype newType;            
+            checkMPIError(MPI_Type_contiguous(
+                count,
+                baseType,
+                &newType));
+            std::string Name = buildMPIGenericName(newType);
+            //If type already in cache, return existing type
+            return cacheType(newType);
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
+        }
+
+        /**
+         * Create an MPI_Type_vector type for a specified base type, count, blocklength and stride
+         * @param count The number of blocks in the vector type
+         * @param blocklength The number of elements in each block
+         * @param stride The stride between blocks
+         * @param baseType The base MPI_Datatype
+         */
+        MPI_Datatype createMPIVectorType(int count, int blocklength, int stride, MPI_Datatype baseType)
+        {
+            #ifdef USE_MPI
+            MPI_Datatype newType;
+            checkMPIError(MPI_Type_vector(
+                count,
+                blocklength,
+                stride,
+                baseType,
+                &newType));
+            return cacheType(newType);
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
+        }
+
+        /**
+         * Create an MPI_Type_hvector type for a specified base type, count, blocklength and stride
+         * @param count The number of blocks in the hvector type
+         * @param blocklength The number of elements in each block
+         * @param stride The stride between blocks
+         * @param baseType The base MPI_Datatype
+         */
+        MPI_Datatype createMPIHVectorType(int count, int blocklength, MPI_Aint stride, MPI_Datatype baseType)
+        {
+            #ifdef USE_MPI
+            MPI_Datatype newType;
+            checkMPIError(MPI_Type_create_hvector(
+                count,
+                blocklength,
+                stride,
+                baseType,
+                &newType));
+            std::string Name = buildMPIGenericName(newType);
+            //If type already in cache, return existing type
+            return cacheType(newType);
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
+        }
+
+        /**
+         * Add a generic MPI_Datatype to the cache with an automatically generated name
+         * @param mpiType The MPI_Datatype to add
+         * @result The name assigned to the MPI_Datatype
+         */
+        std::string cacheMPIType(MPI_Datatype &mpiType)
+        {
+            #ifdef USE_MPI
+            mpiType = cacheType(mpiType);
+            return buildMPIGenericName(mpiType);
+            #else
+            return "MPI not enabled! Seeing this is an error.";
+            #endif
+        }
+
+        
+        /**
+         * Get a name for a given MPI_Datatype
+         * @param mpiType The MPI_Datatype to get the name for
+         * @return The name of the MPI_Datatype
+         */
+        std::string getMPITypeName(MPI_Datatype mpiType)
+        {
+            #ifdef USE_MPI
+            return buildMPIGenericName(mpiType);
+            #else
+            return "MPI not enabled! Seeing this is an error.";
+            #endif
+        }
+
+
+        /**
+         * Checkout the MPI_Datatype for a given type name, incrementing the reference count
+         * @param typeName The name of the type to checkout
+         * @return The MPI_Datatype
+         */
+        MPI_Datatype checkoutMPIType(const std::string &typeName)
+        {
+            #ifdef USE_MPI
+            return checkoutCore(typeName);
+            #else
+            return MPI_DATATYPE_NULL;
+            #endif
+        }
+
+
+        /**
+         * Checkin the MPI_Datatype, decrementing the reference count and deleting if necessary
+         * @param mpiType The MPI_Datatype to checkin
+         * @param forceDelete If true, delete the type even if the reference count is not zero
+         */
+        void checkinMPIType(MPI_Datatype &mpiType, bool forceDelete = false)
+        {
+            #ifdef USE_MPI
+            bool deleted = deleteMPIType(mpiType, forceDelete);
+            if (deleted) mpiType = MPI_DATATYPE_NULL;
+            #endif
         }
 
         /**
@@ -839,7 +1148,7 @@ namespace SAMS
                     }
                 }
                 SAMS::debugAll3 << "Creating lower send type on axis " << axis << std::endl;
-                mpiSend[axis*2] = variableSliceType(rank, dims, LB, UB, baseType);
+                mpiSend[axis*2] = createArraySliceType(rank, dims, LB, UB, baseType);
 
                 //Send on upper edges
                 for (int i = 0; i < rank; i++)
@@ -855,7 +1164,7 @@ namespace SAMS
                         UB[i] = dims[i].getLocalDomainUB();
                     }
                 }
-                mpiSend[axis*2+1] = variableSliceType(rank, dims, LB, UB, baseType);
+                mpiSend[axis*2+1] = createArraySliceType(rank, dims, LB, UB, baseType);
 
                 //Receive types
                 //Receive on lower edges
@@ -870,7 +1179,7 @@ namespace SAMS
                         UB[i] = dims[i].getLocalDomainUB();
                     }
                 }
-                mpiRecv[axis*2] = variableSliceType(rank, dims, LB, UB, baseType);
+                mpiRecv[axis*2] = createArraySliceType(rank, dims, LB, UB, baseType);
 
                 //Receive on upper edges
                 for (int i = 0; i < rank; i++)
@@ -886,7 +1195,7 @@ namespace SAMS
                         UB[i] = dims[i].getLocalDomainUB();
                     }
                 }
-                mpiRecv[axis*2+1] = variableSliceType(rank, dims, LB, UB, baseType);
+                mpiRecv[axis*2+1] = createArraySliceType(rank, dims, LB, UB, baseType);
             }
             #else
             //If not using MPI, set all types to MPI_DATATYPE_NULL
@@ -911,19 +1220,19 @@ namespace SAMS
             for (int axis = 0; axis < rank; axis++)
             {
                 if (mpiSend[axis*2] != MPI_DATATYPE_NULL) {
-                    deleteMPISubarrayType(mpiSend[axis*2]);
+                    deleteMPIType(mpiSend[axis*2]);
                     mpiSend[axis*2] = MPI_DATATYPE_NULL;
                 }
                 if (mpiSend[axis*2+1] != MPI_DATATYPE_NULL) {
-                    deleteMPISubarrayType(mpiSend[axis*2+1]);
+                    deleteMPIType(mpiSend[axis*2+1]);
                     mpiSend[axis*2+1] = MPI_DATATYPE_NULL;
                 }
                 if (mpiRecv[axis*2] != MPI_DATATYPE_NULL) {
-                    deleteMPISubarrayType(mpiRecv[axis*2]);
+                    deleteMPIType(mpiRecv[axis*2]);
                     mpiRecv[axis*2] = MPI_DATATYPE_NULL;
                 }
                 if (mpiRecv[axis*2+1] != MPI_DATATYPE_NULL) {
-                    deleteMPISubarrayType(mpiRecv[axis*2+1]);
+                    deleteMPIType(mpiRecv[axis*2+1]);
                     mpiRecv[axis*2+1] = MPI_DATATYPE_NULL;
                 }
             }
@@ -942,28 +1251,36 @@ namespace SAMS
             }
         }
 
+        void haloExchange(void* data, int rank, MPI_Datatype* mpiSend, MPI_Datatype* mpiRecv, int axis, SAMS::domain::edges edgeType)
+        {
+#ifdef USE_MPI
+            int sendIndex = (edgeType == SAMS::domain::edges::lower ? axis*2 : axis*2+1);
+            int recvIndex = (edgeType == SAMS::domain::edges::lower ? axis*2+1 : axis*2);
+
+            //Send to specified neighbor, receive from specified neighbor
+            //Use precreated MPI datatypes for the variable slices
+            checkMPIError(MPI_Sendrecv(static_cast<char*>(data), 1, mpiSend[sendIndex], neighbors[sendIndex], 0, static_cast<char*>(data), 1, mpiRecv[recvIndex], neighbors[recvIndex], 0, comm, MPI_STATUS_IGNORE));
+            SAMS::debugAll3 << "Completed halo exchange on axis " << axis << std::endl;
+#endif
+        }
+
+        void haloExchange(void* data, int rank, MPI_Datatype* mpiSend, MPI_Datatype* mpiRecv, int axis)
+        {
+#ifdef USE_MPI
+            haloExchange(data, rank, mpiSend, mpiRecv, axis, SAMS::domain::edges::lower);
+            haloExchange(data, rank, mpiSend, mpiRecv, axis, SAMS::domain::edges::upper);
+#endif
+        }
+
+        /**
+         * 
+         */
         void haloExchange(void* data, int rank, MPI_Datatype* mpiSend, MPI_Datatype* mpiRecv)
         {
 #ifdef USE_MPI
-            void* basePtr = data;
             for (int axis = 0; axis < rank; axis++)
             {
-                if (mpiSend[axis*2] == MPI_DATATYPE_NULL){
-                    //Axis is not decomposed, skip
-                    continue;
-                }
-                if (neighbors[axis*2] != MPI_PROC_NULL){
-                    SAMS::debugAll3 << "SendRecv to lower neighbor " << neighbors[axis*2] << " on axis " << axis << std::endl;
-                }
-                if (neighbors[axis*2+1] != MPI_PROC_NULL){
-                    SAMS::debugAll3 << "SendRecv to upper neighbor " << neighbors[axis*2+1] << " on axis " << axis << std::endl;
-                }
-                //Send to lower neighbor, receive from upper neighbor
-                //Use precreated MPI datatypes for the variable slices
-                checkMPIError(MPI_Sendrecv(static_cast<char*>(basePtr), 1, mpiSend[axis*2], neighbors[axis*2], 0, static_cast<char*>(basePtr), 1, mpiRecv[axis*2+1], neighbors[axis*2+1], 0, comm, MPI_STATUS_IGNORE));
-                //Send to upper neighbor, receive from lower neighbor
-                checkMPIError(MPI_Sendrecv(static_cast<char*>(basePtr), 1, mpiSend[axis*2+1], neighbors[axis*2+1], 0, static_cast<char*>(basePtr), 1, mpiRecv[axis*2], neighbors[axis*2], 0, comm, MPI_STATUS_IGNORE));
-                SAMS::debugAll3 << "Done axis " << axis << std::endl;
+                haloExchange(data, rank, mpiSend, mpiRecv, axis);
             }
             SAMS::debugAll3 << "Completed halo exchange" << std::endl;
 #endif
@@ -1005,11 +1322,16 @@ namespace SAMS
     MPIManager<Dims>& getMPIManager(MPI_Comm customComm = MPI_COMM_WORLD)
     {
         auto &instances = MPI::getInstanceMap<Dims>();
-        auto it = instances.find(customComm);
+        #ifdef USE_MPI
+        MPI_Fint commFint = MPI_Comm_c2f(customComm);
+        #else
+        MPI_Fint commFint = 0;
+        #endif
+        auto it = instances.find(commFint);
         if (it == instances.end()) {
-            instances.emplace(customComm, customComm);
+            instances.emplace(commFint, customComm);
         }
-        return instances[customComm];
+        return instances[commFint];
     }
 
 

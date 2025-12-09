@@ -393,6 +393,17 @@ namespace SAMS{
         }
 
         /**
+         * Get the lower bound for the actual DOMAIN i.e. the first index of the real data, assuming zero-based indexing
+         * @result Always returns the number of lower ghost cells, but just used to avoid magic numbers in code
+         */
+        SIGNED_INDEX_TYPE getLocalDomainLBZeroBase() const
+        {
+            //Now we have to add the number of ghost cells to get to zero-based indexing
+            return static_cast<SIGNED_INDEX_TYPE>(lowerGhosts);
+        }
+
+
+        /**
         * Get the lower bound for the actual DOMAIN i.e. the first index of the real data for a given staggering type, assuming zero-based indexing
          */
         SIGNED_INDEX_TYPE getLocalDomainLBZeroBase(staggerType s) const
@@ -672,7 +683,7 @@ namespace SAMS{
          * Get the range for the actual domain (i.e. the real data only, no ghost cells)
          * @return A portableWrapper::Range representing the domain range
          */
-        portableWrapper::Range getDomainRange() const
+        portableWrapper::Range getLocalDomainRange() const
         {
             return portableWrapper::Range(getLocalDomainLB(), getLocalDomainUB());
         }
@@ -682,9 +693,28 @@ namespace SAMS{
          * @param s The staggering type
          * @return A portableWrapper::Range representing the domain range
          */
-        portableWrapper::Range getDomainRange(staggerType s) const
+        portableWrapper::Range getLocalDomainRange(staggerType s) const
         {
             return portableWrapper::Range(getLocalDomainLB(s), getLocalDomainUB(s));
+        }
+
+        /**
+         * Get the range for the actual domain (i.e. the real data only, no ghost cells) with zero-based indexing
+         * @return A portableWrapper::Range representing the domain range
+         */
+        portableWrapper::Range getLocalDomainRangeZeroBase() const
+        {
+            return portableWrapper::Range(getLocalDomainLBZeroBase(), getLocalDomainUBZeroBase());
+        }
+
+        /**
+         * Get the range for the actual domain (i.e. the real data only, no ghost cells) with zero-based indexing
+         * @param s The staggering type
+         * @return A portableWrapper::Range representing the domain range
+         */
+        portableWrapper::Range getLocalDomainRangeZeroBase(staggerType s) const
+        {
+            return portableWrapper::Range(getLocalDomainLBZeroBase(s), getLocalDomainUBZeroBase(s));
         }
 
         /**
@@ -735,7 +765,7 @@ namespace SAMS{
         }
 
         /**
-         * Get the global range for the local domain (i.e. the real data only, no ghost cells)
+         * Get the global range for the local domain (i.e. the real data only, no ghost cells) on the local MPI rank
          * @param s The staggering type
          * @return A portableWrapper::Range representing the global domain range
          */
