@@ -18,7 +18,9 @@
 #include "defs.h"
 #include "utils.h"
 #include "range.h"
+#include "OpenMPUnrolledBackend.h"
 #include <cstring>
+#include <vector>
 
 namespace portableWrapper
 {
@@ -38,8 +40,8 @@ namespace portableWrapper
         #define OMP6_0 202311
 
         // Forward declaration for the core CPU forEach function
-        template <int rank, int level = 0, typename T_func, typename T_cRange, typename... T_oRanges>
-        INLINE DEVICEPREFIX void forEachCore(
+        template <int rank, int level = 0, bool serial=false, typename T_func, typename T_cRange, typename... T_oRanges>
+        HOSTINLINE HOSTDEVICEPREFIX void forEachCore(
             T_func func,
             N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> &tuple, T_cRange cRange, T_oRanges... oRanges);
 
@@ -49,22 +51,12 @@ namespace portableWrapper
          * This function is used when the level is not zero
          * i.e. OpenMP parallelism is only used on the outermost loop.
          */
-        template <int rank, int level = 0, typename T_func, typename T_cRange, typename... T_oRanges>
-        INLINE DEVICEPREFIX void forEachSerial(
+        template <int rank, int level = 0, bool serial=false, typename T_func, typename T_cRange, typename... T_oRanges>
+        HOSTINLINE HOSTDEVICEPREFIX void forEachSerial(
             T_func func,
             N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> &tuple, T_cRange cRange, T_oRanges... oRanges)
         {
-            SIGNED_INDEX_TYPE lower_bound, upper_bound;
-            if constexpr (std::is_same_v<T_cRange, Range>)
-            {
-                lower_bound = cRange.lower_bound;
-                upper_bound = cRange.upper_bound;
-            }
-            else
-            {
-                lower_bound = 1;
-                upper_bound = cRange;
-            }
+            auto [lower_bound, upper_bound] = getRange(cRange);
             if constexpr (level < rank)
             {
                 for (SIGNED_INDEX_TYPE i = lower_bound; i <= upper_bound; ++i)
@@ -72,11 +64,40 @@ namespace portableWrapper
                     GET<level>(tuple) = i;
                     if constexpr (sizeof...(oRanges) > 0)
                     {
-                        forEachCore<rank, level + 1>(func, tuple, oRanges...);
+                        forEachCore<rank, level + 1, serial>(func, tuple, oRanges...);
                     }
                     else
                     {
-                        applyToData(func, tuple);
+                        applyToDataHost(func, tuple);
+                    }
+                }
+            }
+        }
+
+        /**
+         * CPU vectorized forEach function
+         * Calls the core function for each element in the range.
+         * This function is used when the level is maximal to allow vectorization
+         */
+        template <int rank, int level = 0, bool serial=false, typename T_func, typename T_cRange, typename... T_oRanges>
+        HOSTDEVICEPREFIX HOSTINLINE void forEachVectorized(
+            T_func func,
+            N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> &tuple, T_cRange cRange, T_oRanges... oRanges)
+        {
+            auto [lower_bound, upper_bound] = getRange(cRange);
+            if constexpr (level < rank)
+            {
+                #pragma omp simd
+                for (SIGNED_INDEX_TYPE i = lower_bound; i <= upper_bound; ++i)
+                {
+                    GET<level>(tuple) = i;
+                    if constexpr (sizeof...(oRanges) > 0)
+                    {
+                        forEachCore<rank, level + 1, serial>(func, tuple, oRanges...);
+                    }
+                    else
+                    {
+                        applyToDataHost(func, tuple);
                     }
                 }
             }
@@ -89,22 +110,12 @@ namespace portableWrapper
          * This function is identical to the serial version except that it uses OpenMP to parallelize the outermost loop.
          * I can't think of an even loosely elegant way to do this without duplicating the code.
          */
-        template <int rank, int level = 0, typename T_func, typename T_cRange, typename... T_oRanges>
-        DEVICEPREFIX INLINE void forEachParallel(
+        template <int rank, int level = 0, bool serial = false, typename T_func, typename T_cRange, typename... T_oRanges>
+        HOSTDEVICEPREFIX HOSTINLINE void forEachParallel(
             T_func func,
             N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> &tuple, T_cRange cRange, T_oRanges... oRanges)
         {
-            SIGNED_INDEX_TYPE lower_bound, upper_bound;
-            if constexpr (std::is_same_v<T_cRange, Range>)
-            {
-                lower_bound = cRange.lower_bound;
-                upper_bound = cRange.upper_bound;
-            }
-            else
-            {
-                lower_bound = 1;
-                upper_bound = cRange;
-            }
+            auto [lower_bound, upper_bound] = getRange(cRange);
             if constexpr (level < rank)
             {
 #pragma omp parallel for firstprivate(tuple)
@@ -113,11 +124,11 @@ namespace portableWrapper
                     GET<level>(tuple) = i;
                     if constexpr (sizeof...(oRanges) > 0)
                     {
-                        forEachCore<rank, level + 1>(func, tuple, oRanges...);
+                        forEachCore<rank, level + 1, serial>(func, tuple, oRanges...);
                     }
                     else
                     {
-                        applyToData(func, tuple);
+                        applyToDataHost(func, tuple);
                     }
                 }
             }
@@ -126,18 +137,31 @@ namespace portableWrapper
         /**
          * Selector function to choose between parallel and serial execution on CPU
          */
-        template <int rank, int level, typename T_func, typename T_cRange, typename... T_oRanges>
-        DEVICEPREFIX INLINE void forEachCore(
+        template <int rank, int level, bool serial, typename T_func, typename T_cRange, typename... T_oRanges>
+        HOSTDEVICEPREFIX HOSTINLINE void forEachCore(
             T_func func,
             N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> &tuple, T_cRange cRange, T_oRanges... oRanges)
         {
-            if constexpr (level == 0)
+
+            #ifndef NO_NATIVE_UNROLL
+            //If unrolling is enabled, use the unrolled version (if possible)
+            if constexpr(!serial && rank <= openmp::UNROLL_LIMIT) {
+                forEachParallel(func, cRange, oRanges...);
+            } else 
+            #endif
             {
-                forEachParallel<rank, level>(func, tuple, cRange, oRanges...);
-            }
-            else
-            {
-                forEachSerial<rank, level>(func, tuple, cRange, oRanges...);
+                if constexpr (level == 0 && !serial)
+                {
+                    forEachParallel<rank, level, serial>(func, tuple, cRange, oRanges...);
+                }
+                /*else if constexpr (level == rank - 1)
+                {
+                    forEachVectorized<rank, level, serial>(func, tuple, cRange, oRanges...);
+                }*/
+                else
+                {
+                    forEachSerial<rank, level, serial>(func, tuple, cRange, oRanges...);
+                }
             }
         }
 
@@ -145,7 +169,7 @@ namespace portableWrapper
          * Forward declaration for the core CPU reduction function
          */
         template <int rank, typename T_data, int level = 0, typename T_mapper, typename T_reducer, typename... T_ranges>
-        UNREPEATED void reductionCore(T_mapper mapper, T_reducer reducer, const T_data &initialValue, T_data *reductionSites, N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> tuple, T_ranges... ranges);
+        HOSTUNREPEATED void reductionCore(T_mapper mapper, T_reducer reducer, const T_data &initialValue, T_data *reductionSites, N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> tuple, T_ranges... ranges);
 
         /**
          * CPU serial reduction function
@@ -154,7 +178,7 @@ namespace portableWrapper
          * i.e. OpenMP parallelism is only used on the outermost loop.
          */
         template <int rank, typename T_data, int level = 0, typename T_reducer, typename T_mapper, typename T_cRange, typename... T_oRanges>
-        INLINE void reductionSerial(
+        HOSTINLINE void reductionSerial(
             T_mapper mapper,
             T_reducer reducer,
             const T_data & initialValue,
@@ -183,7 +207,7 @@ namespace portableWrapper
                     }
                     else
                     {
-                        auto result = applyToData(mapper, tuple);
+                        auto result = applyToDataHost(mapper, tuple);
                         //Either this is running fully serial, in which case 0 is correct
                         //Or you are at a lower level of parallel reduction in which case you are using
                         //a thread local reduction variable - it will be put back into the true reduciton variable in reductionParallel
@@ -201,7 +225,7 @@ namespace portableWrapper
          * I can't think of an even loosely elegant way to do this without duplicating the code.
          */
         template <int rank, typename T_data, int level = 0, typename T_reducer, typename T_mapper, typename T_cRange, typename... T_oRanges>
-        INLINE void reductionParallel(
+        HOSTINLINE void reductionParallel(
             T_mapper mapper,
             T_reducer reducer,
             const T_data & initialValue,
@@ -223,22 +247,37 @@ namespace portableWrapper
             {
 #pragma omp parallel firstprivate(tuple)
             {
-                T_data iResult = initialValue;
+                int tid = getOMPThreadID();
+                int nthreads = static_cast<int>(getOMPMaxThreads());
+                std::vector<T_data> iResult(nthreads, initialValue);
                 #pragma omp for
                     for (SIGNED_INDEX_TYPE i = lower_bound; i <= upper_bound; ++i)
                     {
                         GET<level>(tuple) = i;
                         if constexpr (sizeof...(oRanges) > 0)
                         {
-                            reductionCore<rank, T_data, level + 1>(mapper, reducer, initialValue, &iResult, tuple, oRanges...);
+                            reductionCore<rank, T_data, level + 1>(mapper, reducer, initialValue, iResult.data(), tuple, oRanges...);
+
                         }
                         else
                         {
-                            auto result = applyToData(mapper, tuple);
+                            auto result = applyToDataHost(mapper, tuple);
                             reducer(iResult, result);
                         }
                     }
-                    reducer(reductionSites[getOMPThreadID()], iResult);
+                    #pragma omp barrier
+                    for (int stride = 1; stride < nthreads; stride <<= 1) {
+                        if ((tid % (stride << 1)) == 0) {
+                            int other = tid + stride;
+                            if (other < nthreads) {
+                                reducer(iResult[tid], iResult[other]);
+                            }
+                        }
+                        #pragma omp barrier
+                    }
+
+                    // write per-thread final slot out
+                    reductionSites[tid] = iResult[tid];
                 }
             }
         }
@@ -247,9 +286,9 @@ namespace portableWrapper
          * CPU reduction wrapper.
          */
         template <int rank, typename T_data, int level, typename T_mapper, typename T_reducer, typename... T_ranges>
-        UNREPEATED void reductionCore(T_mapper mapper, T_reducer reducer, const T_data &initialValue, T_data *reductionSites, N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> tuple, T_ranges... ranges)
+        HOSTUNREPEATED void reductionCore(T_mapper mapper, T_reducer reducer, const T_data &initialValue, T_data *reductionSites, N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> tuple, T_ranges... ranges)
         {
-            if constexpr (level==0 && false)
+            if constexpr (level==0)
             {
                 reductionParallel<rank, T_data, level>(mapper, reducer, initialValue, reductionSites, tuple, ranges...);
             }
@@ -277,7 +316,7 @@ namespace portableWrapper
         }
 
        template<typename T_data, int rankS, int rankD, arrayTags tagS, arrayTags tagD>
-        UNREPEATED void copyData(portableArray<T_data, rankD, tagD> &destination, const portableArray<T_data, rankS, tagS> &source) {
+        HOSTUNREPEATED void copyData(portableArray<T_data, rankD, tagD> &destination, const portableArray<T_data, rankS, tagS> &source) {
             //Here in the OpenMP backend, given that we require that all types be trivially copyable,
             //we can just use memcpy to copy the data.
             std::memcpy(destination.data(), source.data(), source.getElements() * sizeof(T_data));
@@ -288,9 +327,20 @@ namespace portableWrapper
          * Memory allocated by this function can be unavailable on the host
          */
         template<typename T>
-        UNREPEATED T* allocate(size_t elements) {
+        HOSTUNREPEATED T* allocate(size_t elements) {
+            //return static_cast<T*>(aligned_alloc(64, elements * sizeof(T)));
             return static_cast<T*>(std::malloc(elements * sizeof(T))); // Allocate memory using malloc
         }
+
+        /**
+         * Funtion to allocate memory of a fixed number of elements with a given alignment
+         * Memory allocated by this function can be unavailable on the host
+         */
+        template<typename T>
+        HOSTUNREPEATED T* allocateAligned(size_t elements, size_t alignment) {
+            return static_cast<T*>(aligned_alloc(alignment, elements * sizeof(T))); // Allocate aligned memory
+        }
+            
 
         /**
          * Function to allocate shared memory of a fixed number of elements
@@ -300,7 +350,7 @@ namespace portableWrapper
          * should return nullptr.
          */
         template<typename T>
-        UNREPEATED T* allocateShared(size_t elements) {
+        HOSTUNREPEATED T* allocateShared(size_t elements) {
             //Shared data is the same as normal data in OpenMP
             return allocate<T>(elements); // Allocate memory using malloc
         }
@@ -309,26 +359,53 @@ namespace portableWrapper
          * Function to deallocate device memory
          */
         template<typename T>
-        UNREPEATED void deallocate(T* data) {
+        HOSTUNREPEATED void deallocate(T* data) {
             std::free(data);
         }
 
-        UNREPEATED void fence() {
+       HOSTUNREPEATED void fence() {
             // In OpenMP, we can use a barrier to synchronize threads
             //#pragma omp barrier
         }
 
         template <typename T_func, typename... T_ranges>
-        UNREPEATED void applyKernel(T_func func, T_ranges... ranges)
+        HOSTUNREPEATED void applyKernel(T_func func, T_ranges... ranges)
         {
             N_ary_tuple_type_t<SIGNED_INDEX_TYPE, sizeof...(ranges)> tuple;
-            openmp::forEachCore<sizeof...(ranges)>(func, tuple, ranges...);
+            openmp::forEachCore<sizeof...(ranges), 0, false>(func, tuple, ranges...);
         }
 
-        UNREPEATED void initialize(int& argc, char* argv[])
+        template<typename T_func, typename... T_ranges>
+        HOSTUNREPEATED void applyKernelSerial(T_func func, T_ranges... ranges)
+        {
+            N_ary_tuple_type_t<SIGNED_INDEX_TYPE, sizeof...(ranges)> tuple;
+            openmp::forEachCore<sizeof...(ranges), 0, true>(func, tuple, ranges...);
+        }
+
+        HOSTUNREPEATED void initialize(int& argc, char* argv[])
         {
             // OpenMP initialization can be done here if needed
             // For now, we assume OpenMP is already initialized by the compiler/runtime
+        }
+
+        HOSTUNREPEATED void printInfo()
+        {
+            SAMS::cout << "OpenMP" << std::endl;
+            SAMS::cout << "OpenMP version: ";
+#ifdef _OPENMP
+            SAMS::cout << _OPENMP << std::endl;
+#else
+            SAMS::cout << "Not defined" << std::endl;
+#endif
+            SAMS::cout << "Number of threads: " << getOMPMaxThreads() << std::endl;
+#ifndef NO_NATIVE_UNROLL
+            SAMS::cout << "Loop unrolling enabled up to rank " << openmp::UNROLL_LIMIT << std::endl;
+#ifdef NATIVE_LOOP_COLLAPSE
+            SAMS::cout << "Loop collapse enabled beyond rank " << NATIVE_LOOP_COLLAPSE << std::endl;
+#endif
+#else
+            SAMS::cout << "Native OpenMP loop unrolling disabled. WARNING This is likely to cause performance degradation." << std::endl;
+#endif
         }
 
         namespace atomic {
@@ -338,7 +415,7 @@ namespace portableWrapper
              * @param value The value to add
              */
             template <typename T, typename T2>
-            DEVICEPREFIX void Add(T& target, const T2 value)
+            HOSTDEVICEPREFIX void Add(T& target, const T2 value)
             {
                 #pragma omp atomic
                 target += value;
@@ -350,7 +427,7 @@ namespace portableWrapper
              * @param value The value to and with
              */
             template <typename T, typename T2>            
-            DEVICEPREFIX void And(T& target, const T2 value)
+            HOSTDEVICEPREFIX void And(T& target, const T2 value)
             {
                 #pragma omp atomic
                 target &= value;
@@ -361,7 +438,7 @@ namespace portableWrapper
              * @param target The target variable to decrement
              */
             template <typename T>
-            DEVICEPREFIX void Dec(T& target)
+            HOSTDEVICEPREFIX void Dec(T& target)
             {
                 #pragma omp atomic
                 --target;
@@ -372,7 +449,7 @@ namespace portableWrapper
              * @param target The target variable to increment
              */
             template <typename T>            
-            DEVICEPREFIX void Inc(T& target)
+            HOSTDEVICEPREFIX void Inc(T& target)
             {
                 #pragma omp atomic
                 ++target;
@@ -384,7 +461,7 @@ namespace portableWrapper
              * @param value The value to compare with
              */
             template< typename T, typename T2>            
-            DEVICEPREFIX void Max(T& target, const T2 value)
+            HOSTDEVICEPREFIX void Max(T& target, const T2 value)
             {
                 //Check for OpenMP 5.1 or higher
                 #if defined(_OPENMP) && (_OPENMP >= OMP5_1)
@@ -404,7 +481,7 @@ namespace portableWrapper
              * @param value The value to compare with
              */
             template<typename T, typename T2>            
-            DEVICEPREFIX void Min(T& target, const T2 value)
+            HOSTDEVICEPREFIX void Min(T& target, const T2 value)
             {
                 //Check for OpenMP 5.1 or higher
                 #if defined(_OPENMP) && (_OPENMP >= OMP5_1)
@@ -424,7 +501,7 @@ namespace portableWrapper
              * @param value The value to or with
              */
             template<typename T, typename T2>            
-            DEVICEPREFIX void Or(T& target, const T2 value)
+            HOSTDEVICEPREFIX void Or(T& target, const T2 value)
             {
                 #pragma omp atomic
                 target |= value;
@@ -436,7 +513,7 @@ namespace portableWrapper
              * @param value The value to subtract
              */
             template<typename T, typename T2>            
-            DEVICEPREFIX void Sub(T& target, const T2 value)
+            HOSTDEVICEPREFIX void Sub(T& target, const T2 value)
             {
                 #pragma omp atomic
                 target -= value;
