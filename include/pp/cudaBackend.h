@@ -120,10 +120,14 @@ namespace portableWrapper
              * in a launched kernel
              */
             struct kernelInflightInfo{
-                bool active;
-                bool firstCallThisBlock;
+                bool active; //Is a current location active for this thread
             };
 
+            /*
+            * CUDA reduction phase 1 functor
+            * This functor performs the first phase of a reduction operation in CUDA. It maps input values using a mapper function,
+            * performs a block-level reduction using a reducer function, and stores the intermediate results in global memory.
+            */
             template<typename T_mapper, typename T_reducer, typename T_data, int rank>
             struct reductionPhase1{
                 private:
@@ -179,6 +183,11 @@ namespace portableWrapper
                     : mapper(m), reducer(r), data(d), initialValue(init){}
             };
 
+            /**
+             * CUDA reduction phase 2 functor
+             * This functor performs the second phase of a reduction operation in CUDA. It reduces the intermediate results
+             * stored in global memory from the first phase and produces the final reduced value.
+             */
             template<typename T_reducer, typename T_data>
             struct reductionPhase2{
                 T_reducer reducer;
@@ -671,7 +680,7 @@ namespace portableWrapper
                     } while (swapped != orig);
                     data = __longlong_as_double(orig);
                 } else {
-                    //static_assert(always_false<T>::value, "Atomic And not supported for this type");
+                    static_assert(alwaysFalse<T>::value, "Atomic And not supported for this type");
                 }
             }
 
@@ -725,7 +734,7 @@ namespace portableWrapper
                     } while (swapped != orig);
                     data = __longlong_as_double(orig);
                 } else {
-                    //static_assert(always_false<T>::value, "Atomic Max not supported for this type");
+                    static_assert(alwaysFalse<T>::value, "Atomic Max not supported for this type");
                 }
             }
 
@@ -761,7 +770,7 @@ namespace portableWrapper
                     } while (swapped != orig);
                     data = __longlong_as_double(orig);
                 } else {
-                    //static_assert(always_false<T>::value, "Atomic Min not supported for this type");
+                    static_assert(alwaysFalse<T>::value, "Atomic Min not supported for this type");
                 }
             }
 
@@ -797,7 +806,7 @@ namespace portableWrapper
                     } while (swapped != orig);
                     data = __longlong_as_double(orig);
                 } else {
-                    //static_assert(always_false<T>::value, "Atomic Or not supported for this type");
+                    static_assert(alwaysFalse<T>::value, "Atomic Or not supported for this type");
                 }
             }
 
