@@ -221,7 +221,7 @@ namespace portableWrapper {
         T* allocateCore(portableArray<T, rank, tag> &wrapper, const T_lower *lbounds, const T_upper *ubounds)
         {
             static_assert(std::is_default_constructible_v<T>, "Can only allocate arrays of types that have parameterless constructors.");
-            wrapper.setSizes(lbounds, ubounds);
+            wrapper.setSizesArray(lbounds, ubounds);
             SIZE_TYPE elements = wrapper.getElements();
             T* data_;
             if constexpr(tag == arrayTags::host)
@@ -275,10 +275,10 @@ namespace portableWrapper {
         }
 
         template <bool shared, typename T, int rank, arrayTags tag, typename T_lower, typename T_upper>
-        T* wrapCore(portableArray<T, rank, tag> &wrapper, T* data_, const T_lower *lbounds, const T_upper *ubounds)
+        T* wrapCoreArray(portableArray<T, rank, tag> &wrapper, T* data_, const T_lower *lbounds, const T_upper *ubounds)
         {
             static_assert(std::is_default_constructible_v<T>, "Can only allocate arrays of types that have parameterless constructors.");
-            wrapper.setSizes(lbounds, ubounds);
+            wrapper.setSizesArray(lbounds, ubounds);
             SIZE_TYPE elements = wrapper.getElements();
             if constexpr (!std::is_trivially_default_constructible_v<T>)
             {
@@ -384,18 +384,18 @@ namespace portableWrapper {
 
         //Wrap a portableArray with the specified lower and upper bounds
         template<typename T, int rank ,arrayTags tag, typename T_bounds>
-        void wrap(portableArray<T, rank, tag> &wrapper, T* data_, const T_bounds *lbounds, const T_bounds *ubounds)
+        void wrapArray(portableArray<T, rank, tag> &wrapper, T* data_, const T_bounds *lbounds, const T_bounds *ubounds)
         {
             deallocate(wrapper); // Ensure any previous allocation is cleaned up
-            wrapCore<false>(wrapper, data_, lbounds, ubounds);
+            wrapCoreArray<false>(wrapper, data_, lbounds, ubounds);
             storeWrappedData<tag>(data_, wrapper.getElements());
         }
 
         template<typename T, int rank, arrayTags tag, typename T_bounds>
-        void wrapManaged(portableArray<T, rank, tag> &wrapper, T* data_, const T_bounds *lbounds, const T_bounds *ubounds)
+        void wrapManagedArray(portableArray<T, rank, tag> &wrapper, T* data_, const T_bounds *lbounds, const T_bounds *ubounds)
         {
             deallocate(wrapper); // Ensure any previous allocation is cleaned up
-            wrapCore<true>(wrapper, lbounds, ubounds);
+            wrapCoreArray<true>(wrapper, data_, lbounds, ubounds);
 			wrapper.setManaged(true);
             storeWrappedData<tag>(data_, wrapper.getElements());
         }

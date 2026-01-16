@@ -43,7 +43,11 @@ namespace portableWrapper{
                     return Kokkos::RangePolicy<KOKKOS_EXECUTION_SPACE,iType>(starts[0], ends[0]);
                 else
                     //This avoids having to reverse the order of the ranges for Kokkos
+                    #if defined(KOKKOS_CUDA) || defined(KOKKOS_HIP)
+                    return Kokkos::MDRangePolicy<Kokkos::Rank<sizeof...(T_ranges)/*,Kokkos::Iterate::Left, Kokkos::Iterate::Left*/>,KOKKOS_EXECUTION_SPACE,iType>(starts, ends);
+                    #else
                     return Kokkos::MDRangePolicy<Kokkos::Rank<sizeof...(T_ranges),Kokkos::Iterate::Right, Kokkos::Iterate::Right>,KOKKOS_EXECUTION_SPACE,iType>(starts, ends);
+                    #endif
             }();
             Kokkos::parallel_for(
                 name,
@@ -86,7 +90,7 @@ namespace portableWrapper{
             KOKKOS_INLINE_FUNCTION
             result_view_type view() const
             {
-                return result_view_type(&value_, 1);
+                return result_view_type(&value_);
             }
 
             KOKKOS_INLINE_FUNCTION
@@ -257,11 +261,37 @@ namespace portableWrapper{
          */
         UNREPEATED void printInfo(){
             SAMS::cout << "Kokkos" << std::endl;
+            SAMS::cout << "version: " << KOKKOS_VERSION_MAJOR << "." << KOKKOS_VERSION_MINOR << "." << KOKKOS_VERSION_PATCH << std::endl;
             // Get the Kokkos execution space
             auto exec_space = KOKKOS_EXECUTION_SPACE();
             SAMS::cout << "Kokkos execution space: " << exec_space.name() << std::endl;
             SAMS::cout << "Kokkos concurrency: " << exec_space.concurrency() << std::endl;
         }
+
+        /**Helper class to build an N level deep pointer */
+        template<typename T, int levels>
+        struct deepPointer {
+            using type = typename deepPointer<T, levels - 1>::type*;
+        };
+        template<typename T>
+        struct deepPointer<T, 0> {
+            using type = T;
+        };
+
+        /**
+         * Function to convert a portableArray to a Kokkos View
+         */
+        template<typename T, int rank, arrayTags tag>
+        UNREPEATED auto toView(portableArray<T, rank, tag>& portableArray) {
+            using kokkosSpace = std::conditional_t<tag == arrayTags::host, Kokkos::HostSpace, KOKKOS_EXECUTION_SPACE::memory_space>;
+            using viewType = Kokkos::View<typename deepPointer<T, rank>::type, kokkosSpace>;
+            Kokkos::Array<SIGNED_INDEX_TYPE, rank> dims;
+            for (int i = 0; i < rank; ++i) {
+                dims[i] = portableArray.size[i];
+            }
+            return viewType(portableArray.data(), dims);
+        }
+
 
         template<typename T>
         UNREPEATED auto compare_and_swap(T *ptr, T expected, T desired)
@@ -300,7 +330,7 @@ namespace portableWrapper{
             template<typename T>            
             DEVICEPREFIX void Dec(T& target)
             {
-                Kokkos::atomic_decrement(&target);
+                Kokkos::atomic_dec(&target);
             }
 
             /**
@@ -310,7 +340,7 @@ namespace portableWrapper{
             template<typename T>            
             DEVICEPREFIX void Inc(T& target)
             {
-                Kokkos::atomic_increment(&target);
+                Kokkos::atomic_inc(&target);
             }
 
             /**
