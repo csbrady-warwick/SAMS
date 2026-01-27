@@ -16,365 +16,382 @@
 #include "variableRegistry.h"
 #include "axisRegistry.h"
 
-/**
- * Register variables with the portable array manager.
- */
-
- void simulation::registerVars(){
-
-    auto& varRegistry = SAMS::getvariableRegistry();
-
-    const int ghosts=2; //2 Ghost cells at top and bottom of each dimension
-
-    varRegistry.registerVariable<T_dataType>("energy_electron", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
-
-    varRegistry.registerVariable<T_dataType>("energy_ion", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
-
-    varRegistry.registerVariable<T_dataType>("rho", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
-
-    varRegistry.registerVariable<T_dataType>("vx", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
-
-    varRegistry.registerVariable<T_dataType>("vy", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
-
-    varRegistry.registerVariable<T_dataType>("vz", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
-    
-    varRegistry.registerVariable<T_dataType>("LARE/vx1", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
-
-    varRegistry.registerVariable<T_dataType>("LARE/vy1", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
-
-    varRegistry.registerVariable<T_dataType>("LARE/vz1", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
-
-    varRegistry.registerVariable<T_dataType>("bx", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts));
-
-    varRegistry.registerVariable<T_dataType>("by", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z",ghosts));
-
-    varRegistry.registerVariable<T_dataType>("bz", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts), SAMS::dimension("Y",ghosts), SAMS::dimension("Z",ghosts, SAMS::staggerType::HALF_CELL));
-
-    varRegistry.registerVariable<T_dataType>("LARE/dm", SAMS::memorySpace::DEVICE, SAMS::dimension("X",ghosts, SAMS::staggerType::CENTRED), SAMS::dimension("Y",ghosts, SAMS::staggerType::CENTRED), SAMS::dimension("Z",ghosts, SAMS::staggerType::CENTRED));
- }
-
-/**
- * Allocate the data arrays for the simulation.
- * This allocates the permanent state arrays that are used throughout the simulation.
- */
-void simulation::allocate(simulationData &data)
-{
-    T_sizeType nx, ny, nz;
-
-    auto& axRegistry = SAMS::getaxisRegistry();
-    auto& varRegistry = SAMS::getvariableRegistry();
-    //Centred since LARE thinks in terms of cell centres for nx, ny, nz
-    nx = axRegistry.getLocalDomainElements("X", SAMS::staggerType::CENTRED);
-    ny = axRegistry.getLocalDomainElements("Y", SAMS::staggerType::CENTRED);
-    nz = axRegistry.getLocalDomainElements("Z", SAMS::staggerType::CENTRED);
-
-    //Get the ranges for the whole local domain
-    data.xcLocalRange = axRegistry.getLocalRange("X", SAMS::staggerType::CENTRED);
-    data.ycLocalRange = axRegistry.getLocalRange("Y", SAMS::staggerType::CENTRED);
-    data.zcLocalRange = axRegistry.getLocalRange("Z", SAMS::staggerType::CENTRED);
-    data.xbLocalRange = axRegistry.getLocalRange("X", SAMS::staggerType::HALF_CELL);
-    data.ybLocalRange = axRegistry.getLocalRange("Y", SAMS::staggerType::HALF_CELL);
-    data.zbLocalRange = axRegistry.getLocalRange("Z", SAMS::staggerType::HALF_CELL);
-
-    //Get the ranges for the actual domain (no ghost cells)
-    data.xcLocalDomainRange = axRegistry.getLocalDomainRange("X", SAMS::staggerType::CENTRED);
-    data.ycLocalDomainRange = axRegistry.getLocalDomainRange("Y", SAMS::staggerType::CENTRED);
-    data.zcLocalDomainRange = axRegistry.getLocalDomainRange("Z", SAMS::staggerType::CENTRED);
-    data.xbLocalDomainRange = axRegistry.getLocalDomainRange("X", SAMS::staggerType::HALF_CELL);
-    data.ybLocalDomainRange = axRegistry.getLocalDomainRange("Y", SAMS::staggerType::HALF_CELL);
-    data.zbLocalDomainRange = axRegistry.getLocalDomainRange("Z", SAMS::staggerType::HALF_CELL);
-
-    data.nx = nx;
-    data.ny = ny;
-    data.nz = nz;
-
-    data.mu0_si = mu0_si;
-    data.time = 0.0;
-
-    manager.clear(); // Delete any allocated data
-
-    using Range = portableWrapper::Range;
-    //Grab the final variable sizes from the registry and wrap the arrays
-    varRegistry.fillPPArray("energy_electron", data.energy_electron);
-    portableWrapper::assign(data.energy_electron, 0.0);
-    varRegistry.fillPPArray("energy_ion", data.energy_ion);
-    portableWrapper::assign(data.energy_ion, 0.0);
-    varRegistry.fillPPArray("rho", data.rho);
-    portableWrapper::assign(data.rho, 0.0);
-    varRegistry.fillPPArray("vx", data.vx);
-    portableWrapper::assign(data.vx, 0.0);
-    varRegistry.fillPPArray("vy", data.vy);
-    portableWrapper::assign(data.vy, 0.0);
-    varRegistry.fillPPArray("vz", data.vz);
-    portableWrapper::assign(data.vz, 0.0);
-    varRegistry.fillPPArray("bx", data.bx);
-    portableWrapper::assign(data.bx, 0.0);
-    varRegistry.fillPPArray("by", data.by);
-    portableWrapper::assign(data.by, 0.0);
-    varRegistry.fillPPArray("bz", data.bz);
-    portableWrapper::assign(data.bz, 0.0);
-    varRegistry.fillPPArray("LARE/vx1", data.vx1);
-    portableWrapper::assign(data.vx1, 0.0);
-    varRegistry.fillPPArray("LARE/vy1", data.vy1);
-    portableWrapper::assign(data.vy1, 0.0);
-    varRegistry.fillPPArray("LARE/vz1", data.vz1);
-    portableWrapper::assign(data.vz1, 0.0);
-    varRegistry.fillPPArray("LARE/dm", data.dm);
-    portableWrapper::assign(data.dm, 0.0);
-
-    data.isxLB = SAMS::getMPIManager().isEdge(0,SAMS::domain::edges::lower);
-    data.isxUB = SAMS::getMPIManager().isEdge(0,SAMS::domain::edges::upper);
-    data.isyLB = SAMS::getMPIManager().isEdge(1,SAMS::domain::edges::lower);
-    data.isyUB = SAMS::getMPIManager().isEdge(1,SAMS::domain::edges::upper);
-    data.iszLB = SAMS::getMPIManager().isEdge(2,SAMS::domain::edges::lower);
-    data.iszUB = SAMS::getMPIManager().isEdge(2,SAMS::domain::edges::upper);
-
-    SAMS::debugAll3 << "Edge detection: "
-        << " XLB: " << data.isxLB << " XUB: " << data.isxUB
-        << " YLB: " << data.isyLB << " YUB: " << data.isyUB
-        << " ZLB: " << data.iszLB << " ZUB: " << data.iszUB
-        << std::endl;
-
-    manager.allocate(data.p_visc, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-    manager.allocate(data.eta, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-    manager.allocate(data.dxab, data.xbLocalRange, data.ycLocalRange, data.zcLocalRange);
-    manager.allocate(data.dyab, data.xcLocalRange, data.ybLocalRange, data.zcLocalRange);
-    manager.allocate(data.dzab, data.xcLocalRange, data.ycLocalRange, data.zbLocalRange);
-    manager.allocate(data.dxac, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-    manager.allocate(data.dyac, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-    manager.allocate(data.dzac, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-    manager.allocate(data.cv, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-    manager.allocate(data.cv1, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-    manager.allocate(data.cvc, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-
-    axRegistry.fillPPLocalAxis("X", data.xc, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPLocalAxis("Y", data.yc, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPLocalAxis("Z", data.zc, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPLocalAxis("X", data.xb, SAMS::staggerType::HALF_CELL);
-    axRegistry.fillPPLocalAxis("Y", data.yb, SAMS::staggerType::HALF_CELL);
-    axRegistry.fillPPLocalAxis("Z", data.zb, SAMS::staggerType::HALF_CELL);
-    axRegistry.fillPPLocalAxis("X", data.xb_host, SAMS::staggerType::HALF_CELL);
-    axRegistry.fillPPLocalAxis("Y", data.yb_host, SAMS::staggerType::HALF_CELL);
-    axRegistry.fillPPLocalAxis("Z", data.zb_host, SAMS::staggerType::HALF_CELL);
-    axRegistry.fillPPLocalAxis("X", data.xc_host, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPLocalAxis("Y", data.yc_host, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPLocalAxis("Z", data.zc_host, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPAxis("X", data.xb_global, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPAxis("Y", data.yb_global, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPAxis("Z", data.zb_global, SAMS::staggerType::CENTRED);
-
-    axRegistry.fillPPLocalDelta("X", data.dxc, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPLocalDelta("Y", data.dyc, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPLocalDelta("Z", data.dzc, SAMS::staggerType::CENTRED);
-    axRegistry.fillPPLocalDelta("X", data.dxb, SAMS::staggerType::HALF_CELL);
-    axRegistry.fillPPLocalDelta("Y", data.dyb, SAMS::staggerType::HALF_CELL);
-    axRegistry.fillPPLocalDelta("Z", data.dzb, SAMS::staggerType::HALF_CELL);
-
-    manager.allocate(data.hy, Range(-2, nx + 2));
-    manager.allocate(data.hz, Range(-2, nx + 2), Range(-2, ny + 2));
-    manager.allocate(data.hyc, Range(-1, nx + 2));
-    manager.allocate(data.hzc, Range(-1, nx + 2), Range(-1, ny + 2));
-    manager.allocate(data.hz1, Range(-2, nx + 2), Range(-1, ny + 2));
-    manager.allocate(data.hz2, Range(-1, nx + 2), Range(-2, ny + 2));
-    manager.allocate(data.x, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
-    manager.allocate(data.y, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
-    manager.allocate(data.z, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
-    manager.allocate(data.xp, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
-    manager.allocate(data.yp, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
-    manager.allocate(data.zp, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
-    if (data.rke)
-    {
-        manager.allocate(data.delta_ke, Range(-1, nx + 2), Range(-1, ny + 2), Range(-1, nz + 2));
-    }
-
-    data.mpiType = SAMS::gettypeRegistry().getMPIType(SAMS::gettypeRegistry().getTypeID<T_dataType>());
-}
-
-/**
- * Setup the basic simulation parameters like grid points etc.
- */
-void simulation::grid(simulationData &data)
+namespace LARE
 {
 
-    using Range = portableWrapper::Range;
-    portableWrapper::portableArrayManager localManager;
+    namespace pw = portableWrapper;
 
-    auto hyv = localManager.create<double>(portableWrapper::Range(-2, data.nx + 2));
-    auto hzv = localManager.create<double>(portableWrapper::Range(-2, data.nx + 2), portableWrapper::Range(-2, data.ny + 2));
+    /**
+     * Register variables with the portable array manager.
+     */
 
-    data.length_x = data.x_max - data.x_min;
-    data.length_y = data.y_max - data.y_min;
-    data.length_z = data.z_max - data.z_min;
-
-    data.dx = data.length_x / static_cast<T_dataType>(data.nx);
-    data.dy = data.length_y / static_cast<T_dataType>(data.ny);
-    data.dz = data.length_z / static_cast<T_dataType>(data.nz);
-
-    //The grid axes are already filled, just need to set up the metric terms
-    if (data.geometry == geometryType::Cartesian)
+    void LARE3D::registerVars()
     {
-        portableWrapper::assign(data.hy, 1.0);
-        portableWrapper::assign(data.hyc, 1.0);
-        portableWrapper::assign(hyv, 1.0);
-        portableWrapper::fence();
+
+        auto &varRegistry = harness.variableRegistry;
+
+        const int ghosts = 2; // 2 Ghost cells at top and bottom of each dimension
+
+        varRegistry.registerVariable<T_dataType>("energy_electron", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts), SAMS::dimension("Y", ghosts), SAMS::dimension("Z", ghosts));
+
+        varRegistry.registerVariable<T_dataType>("energy_ion", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts), SAMS::dimension("Y", ghosts), SAMS::dimension("Z", ghosts));
+
+        varRegistry.registerVariable<T_dataType>("rho", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts), SAMS::dimension("Y", ghosts), SAMS::dimension("Z", ghosts));
+
+        varRegistry.registerVariable<T_dataType>("vx", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z", ghosts, SAMS::staggerType::HALF_CELL));
+
+        varRegistry.registerVariable<T_dataType>("vy", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z", ghosts, SAMS::staggerType::HALF_CELL));
+
+        varRegistry.registerVariable<T_dataType>("vz", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z", ghosts, SAMS::staggerType::HALF_CELL));
+
+        varRegistry.registerVariable<T_dataType>("LARE/vx1", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z", ghosts, SAMS::staggerType::HALF_CELL));
+
+        varRegistry.registerVariable<T_dataType>("LARE/vy1", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z", ghosts, SAMS::staggerType::HALF_CELL));
+
+        varRegistry.registerVariable<T_dataType>("LARE/vz1", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z", ghosts, SAMS::staggerType::HALF_CELL));
+
+        varRegistry.registerVariable<T_dataType>("bx", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Y", ghosts), SAMS::dimension("Z", ghosts));
+
+        varRegistry.registerVariable<T_dataType>("by", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts), SAMS::dimension("Y", ghosts, SAMS::staggerType::HALF_CELL), SAMS::dimension("Z", ghosts));
+
+        varRegistry.registerVariable<T_dataType>("bz", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts), SAMS::dimension("Y", ghosts), SAMS::dimension("Z", ghosts, SAMS::staggerType::HALF_CELL));
+
+        varRegistry.registerVariable<T_dataType>("LARE/dm", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts, SAMS::staggerType::CENTRED), SAMS::dimension("Y", ghosts, SAMS::staggerType::CENTRED), SAMS::dimension("Z", ghosts, SAMS::staggerType::CENTRED));
     }
-    else if (data.geometry == geometryType::Cylindrical || data.geometry == geometryType::Spherical)
+
+    /**
+     * Allocate the data arrays for the LARE3D.
+     * This allocates the permanent state arrays that are used throughout the LARE3D.
+     */
+    void LARE3D::allocate(simulationData &data)
     {
-        auto l1 = LAMBDA(T_indexType ix)
+        T_sizeType nx, ny, nz;
+
+        auto &axRegistry = harness.axisRegistry;
+        auto &varRegistry = harness.variableRegistry;
+        // Centred since LARE thinks in terms of cell centres for nx, ny, nz
+        nx = axRegistry.getLocalDomainElements("X", SAMS::staggerType::CENTRED);
+        ny = axRegistry.getLocalDomainElements("Y", SAMS::staggerType::CENTRED);
+        nz = axRegistry.getLocalDomainElements("Z", SAMS::staggerType::CENTRED);
+
+        // Get the ranges for the whole local domain
+        data.xcLocalRange = axRegistry.getLocalRange("X", SAMS::staggerType::CENTRED);
+        data.ycLocalRange = axRegistry.getLocalRange("Y", SAMS::staggerType::CENTRED);
+        data.zcLocalRange = axRegistry.getLocalRange("Z", SAMS::staggerType::CENTRED);
+        data.xbLocalRange = axRegistry.getLocalRange("X", SAMS::staggerType::HALF_CELL);
+        data.ybLocalRange = axRegistry.getLocalRange("Y", SAMS::staggerType::HALF_CELL);
+        data.zbLocalRange = axRegistry.getLocalRange("Z", SAMS::staggerType::HALF_CELL);
+
+        std::cout << "Local Ranges: \n";
+        std::cout << "XC: " << data.xcLocalRange << "\n";
+        std::cout << "YC: " << data.ycLocalRange << "\n";
+        std::cout << "ZC: " << data.zcLocalRange << "\n";
+        std::cout << "XB: " << data.xbLocalRange << "\n";
+        std::cout << "YB: " << data.ybLocalRange << "\n";
+        std::cout << "ZB: " << data.zbLocalRange << "\n";
+
+        // Get the ranges for the actual domain (no ghost cells)
+        data.xcLocalDomainRange = axRegistry.getLocalDomainRange("X", SAMS::staggerType::CENTRED);
+        data.ycLocalDomainRange = axRegistry.getLocalDomainRange("Y", SAMS::staggerType::CENTRED);
+        data.zcLocalDomainRange = axRegistry.getLocalDomainRange("Z", SAMS::staggerType::CENTRED);
+        data.xbLocalDomainRange = axRegistry.getLocalDomainRange("X", SAMS::staggerType::HALF_CELL);
+        data.ybLocalDomainRange = axRegistry.getLocalDomainRange("Y", SAMS::staggerType::HALF_CELL);
+        data.zbLocalDomainRange = axRegistry.getLocalDomainRange("Z", SAMS::staggerType::HALF_CELL);
+
+        std::cout << "Local Domain Ranges: \n";
+        std::cout << "XC: " << data.xcLocalDomainRange << "\n";
+        std::cout << "YC: " << data.ycLocalDomainRange << "\n";
+        std::cout << "ZC: " << data.zcLocalDomainRange << "\n";
+        std::cout << "XB: " << data.xbLocalDomainRange << "\n";
+        std::cout << "YB: " << data.ybLocalDomainRange << "\n";
+        std::cout << "ZB: " << data.zbLocalDomainRange << "\n";
+
+        data.nx = nx;
+        data.ny = ny;
+        data.nz = nz;
+
+        data.mu0_si = mu0_si;
+        data.time = 0.0;
+
+        manager.clear(); // Delete any allocated data
+
+        using Range = pw::Range;
+        // Grab the final variable sizes from the registry and wrap the arrays
+        varRegistry.fillPPArray("energy_electron", data.energy_electron);
+        pw::assign(data.energy_electron, 0.0);
+        varRegistry.fillPPArray("energy_ion", data.energy_ion);
+        pw::assign(data.energy_ion, 0.0);
+        varRegistry.fillPPArray("rho", data.rho);
+        pw::assign(data.rho, 0.0);
+        varRegistry.fillPPArray("vx", data.vx);
+        pw::assign(data.vx, 0.0);
+        varRegistry.fillPPArray("vy", data.vy);
+        pw::assign(data.vy, 0.0);
+        varRegistry.fillPPArray("vz", data.vz);
+        pw::assign(data.vz, 0.0);
+        varRegistry.fillPPArray("bx", data.bx);
+        pw::assign(data.bx, 0.0);
+        varRegistry.fillPPArray("by", data.by);
+        pw::assign(data.by, 0.0);
+        varRegistry.fillPPArray("bz", data.bz);
+        pw::assign(data.bz, 0.0);
+        varRegistry.fillPPArray("LARE/vx1", data.vx1);
+        pw::assign(data.vx1, 0.0);
+        varRegistry.fillPPArray("LARE/vy1", data.vy1);
+        pw::assign(data.vy1, 0.0);
+        varRegistry.fillPPArray("LARE/vz1", data.vz1);
+        pw::assign(data.vz1, 0.0);
+        varRegistry.fillPPArray("LARE/dm", data.dm);
+        pw::assign(data.dm, 0.0);
+
+        data.isxLB = harness.MPIManager.isEdge(0, SAMS::domain::edges::lower);
+        data.isxUB = harness.MPIManager.isEdge(0, SAMS::domain::edges::upper);
+        data.isyLB = harness.MPIManager.isEdge(1, SAMS::domain::edges::lower);
+        data.isyUB = harness.MPIManager.isEdge(1, SAMS::domain::edges::upper);
+        data.iszLB = harness.MPIManager.isEdge(2, SAMS::domain::edges::lower);
+        data.iszUB = harness.MPIManager.isEdge(2, SAMS::domain::edges::upper);
+
+        SAMS::debugAll3 << "Edge detection: "
+                        << " XLB: " << data.isxLB << " XUB: " << data.isxUB
+                        << " YLB: " << data.isyLB << " YUB: " << data.isyUB
+                        << " ZLB: " << data.iszLB << " ZUB: " << data.iszUB
+                        << std::endl;
+
+        manager.allocate(data.p_visc, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.eta, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.dxab, data.xbLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.dyab, data.xcLocalRange, data.ybLocalRange, data.zcLocalRange);
+        manager.allocate(data.dzab, data.xcLocalRange, data.ycLocalRange, data.zbLocalRange);
+        manager.allocate(data.dxac, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.dyac, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.dzac, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.cv, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.cv1, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.cvc, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+
+        axRegistry.fillPPLocalAxis("X", data.xc, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPLocalAxis("Y", data.yc, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPLocalAxis("Z", data.zc, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPLocalAxis("X", data.xb, SAMS::staggerType::HALF_CELL);
+        axRegistry.fillPPLocalAxis("Y", data.yb, SAMS::staggerType::HALF_CELL);
+        axRegistry.fillPPLocalAxis("Z", data.zb, SAMS::staggerType::HALF_CELL);
+        axRegistry.fillPPLocalAxis("X", data.xb_host, SAMS::staggerType::HALF_CELL);
+        axRegistry.fillPPLocalAxis("Y", data.yb_host, SAMS::staggerType::HALF_CELL);
+        axRegistry.fillPPLocalAxis("Z", data.zb_host, SAMS::staggerType::HALF_CELL);
+        axRegistry.fillPPLocalAxis("X", data.xc_host, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPLocalAxis("Y", data.yc_host, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPLocalAxis("Z", data.zc_host, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPAxis("X", data.xb_global, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPAxis("Y", data.yb_global, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPAxis("Z", data.zb_global, SAMS::staggerType::CENTRED);
+
+        axRegistry.fillPPLocalDelta("X", data.dxc, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPLocalDelta("Y", data.dyc, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPLocalDelta("Z", data.dzc, SAMS::staggerType::CENTRED);
+        axRegistry.fillPPLocalDelta("X", data.dxb, SAMS::staggerType::HALF_CELL);
+        axRegistry.fillPPLocalDelta("Y", data.dyb, SAMS::staggerType::HALF_CELL);
+        axRegistry.fillPPLocalDelta("Z", data.dzb, SAMS::staggerType::HALF_CELL);
+
+        manager.allocate(data.hy, Range(-2, nx + 2));
+        manager.allocate(data.hz, Range(-2, nx + 2), Range(-2, ny + 2));
+        manager.allocate(data.hyc, Range(-1, nx + 2));
+        manager.allocate(data.hzc, Range(-1, nx + 2), Range(-1, ny + 2));
+        manager.allocate(data.hz1, Range(-2, nx + 2), Range(-1, ny + 2));
+        manager.allocate(data.hz2, Range(-1, nx + 2), Range(-2, ny + 2));
+        manager.allocate(data.x, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
+        manager.allocate(data.y, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
+        manager.allocate(data.z, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
+        manager.allocate(data.xp, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
+        manager.allocate(data.yp, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
+        manager.allocate(data.zp, Range(-2, nx + 2), Range(-2, ny + 2), Range(-2, nz + 2));
+        if (data.rke)
         {
-            data.hy(ix) = std::abs(data.xb(ix));
-            data.hyc(ix) = std::abs(data.xc(ix));
-            hyv(ix) = (std::abs(data.xc(0)) < none_zero && ix == 1) ? std::abs(data.xc(ix)) : 0.25 * std::abs(data.xc(ix));
-        };
-        portableWrapper::applyKernel(l1, portableWrapper::Range(-2, data.nx + 2));
-    }
-    portableWrapper::fence();
+            manager.allocate(data.delta_ke, Range(-1, nx + 2), Range(-1, ny + 2), Range(-1, nz + 2));
+        }
 
-    if (data.geometry == geometryType::Cartesian || data.geometry == geometryType::Cylindrical)
-    {
-        portableWrapper::assign(data.hz, 1.0);
-        portableWrapper::assign(data.hzc, 1.0);
-        portableWrapper::assign(hzv, 1.0);
-        portableWrapper::assign(data.hz1, 1.0);
-        portableWrapper::assign(data.hz2, 1.0);
-        portableWrapper::fence();
+        data.mpiType = SAMS::gettypeRegistry().getMPIType(SAMS::gettypeRegistry().getTypeID<T_dataType>());
     }
-    else if (data.geometry == geometryType::Spherical)
+
+    /**
+     * Setup the basic LARE3D parameters like grid points etc.
+     */
+    void LARE3D::grid(simulationData &data)
     {
-        auto l1 = LAMBDA(T_indexType iy)
+
+        using Range = pw::Range;
+        pw::portableArrayManager localManager;
+
+        auto hyv = localManager.create<double>(pw::Range(-2, data.nx + 2));
+        auto hzv = localManager.create<double>(pw::Range(-2, data.nx + 2), pw::Range(-2, data.ny + 2));
+
+        data.length_x = data.x_max - data.x_min;
+        data.length_y = data.y_max - data.y_min;
+        data.length_z = data.z_max - data.z_min;
+
+        data.dx = data.length_x / static_cast<T_dataType>(data.nx);
+        data.dy = data.length_y / static_cast<T_dataType>(data.ny);
+        data.dz = data.length_z / static_cast<T_dataType>(data.nz);
+
+        // The grid axes are already filled, just need to set up the metric terms
+        if (data.geometry == geometryType::Cartesian)
         {
-            T_dataType s = std::abs(std::sin(data.yb(iy)));
-            T_indexType ix = -2;
-            data.hz(ix, iy) = data.hy(ix) * s;
-            hzv(ix + 2, iy + 2) = hyv(ix) * s;
-            for (ix = -1; ix <= data.nx + 2; ++ix)
+            pw::assign(data.hy, 1.0);
+            pw::assign(data.hyc, 1.0);
+            pw::assign(hyv, 1.0);
+            pw::fence();
+        }
+        else if (data.geometry == geometryType::Cylindrical || data.geometry == geometryType::Spherical)
+        {
+            auto l1 = LAMBDA(T_indexType ix)
             {
+                data.hy(ix) = std::abs(data.xb(ix));
+                data.hyc(ix) = std::abs(data.xc(ix));
+                hyv(ix) = (std::abs(data.xc(0)) < none_zero && ix == 1) ? std::abs(data.xc(ix)) : 0.25 * std::abs(data.xc(ix));
+            };
+            pw::applyKernel(l1, pw::Range(-2, data.nx + 2));
+        }
+        pw::fence();
+
+        if (data.geometry == geometryType::Cartesian || data.geometry == geometryType::Cylindrical)
+        {
+            pw::assign(data.hz, 1.0);
+            pw::assign(data.hzc, 1.0);
+            pw::assign(hzv, 1.0);
+            pw::assign(data.hz1, 1.0);
+            pw::assign(data.hz2, 1.0);
+            pw::fence();
+        }
+        else if (data.geometry == geometryType::Spherical)
+        {
+            auto l1 = LAMBDA(T_indexType iy)
+            {
+                T_dataType s = std::abs(std::sin(data.yb(iy)));
+                T_indexType ix = -2;
                 data.hz(ix, iy) = data.hy(ix) * s;
-                hzv(ix, iy) = hyv(ix) * s;
-                data.hz2(ix, iy) = data.hyc(ix) * s;
-            }
-        };
-        portableWrapper::applyKernel(l1, portableWrapper::Range(-2, data.ny + 2));
+                hzv(ix + 2, iy + 2) = hyv(ix) * s;
+                for (ix = -1; ix <= data.nx + 2; ++ix)
+                {
+                    data.hz(ix, iy) = data.hy(ix) * s;
+                    hzv(ix, iy) = hyv(ix) * s;
+                    data.hz2(ix, iy) = data.hyc(ix) * s;
+                }
+            };
+            pw::applyKernel(l1, pw::Range(-2, data.ny + 2));
 
-        auto l2 = LAMBDA(T_indexType iy)
-        {
-            T_dataType sc = std::abs(std::sin(data.yc(iy)));
-            T_indexType ix = -2;
-            data.hz1(ix, iy) = data.hy(ix) * sc;
-            for (ix = -1; ix <= data.nx + 2; ++ix)
+            auto l2 = LAMBDA(T_indexType iy)
             {
+                T_dataType sc = std::abs(std::sin(data.yc(iy)));
+                T_indexType ix = -2;
                 data.hz1(ix, iy) = data.hy(ix) * sc;
-                data.hzc(ix, iy) = data.hyc(ix) * sc;
-            }
-        };
-        portableWrapper::applyKernel(l2, portableWrapper::Range(-1, data.ny + 2));
-        portableWrapper::fence();
-    }
+                for (ix = -1; ix <= data.nx + 2; ++ix)
+                {
+                    data.hz1(ix, iy) = data.hy(ix) * sc;
+                    data.hzc(ix, iy) = data.hyc(ix) * sc;
+                }
+            };
+            pw::applyKernel(l2, pw::Range(-1, data.ny + 2));
+            pw::fence();
+        }
 
-    {
-        // Cell centred areas and volumes
-        auto l = LAMBDA(T_indexType iy, T_indexType iz)
         {
-            T_dataType dy = data.dyb(iy);
-            T_dataType dz = data.dzb(iz);
-            T_dataType dydz = dy * dz;
-            data.dxab(-2, iy, iz) = dydz * data.hy(-2) * data.hz1(-2, iy);
-            for (SIGNED_INDEX_TYPE ix = -1; ix <= data.nx + 2; ++ix)
+            // Cell centred areas and volumes
+            auto l = LAMBDA(T_indexType iy, T_indexType iz)
+            {
+                T_dataType dy = data.dyb(iy);
+                T_dataType dz = data.dzb(iz);
+                T_dataType dydz = dy * dz;
+                data.dxab(-2, iy, iz) = dydz * data.hy(-2) * data.hz1(-2, iy);
+                for (SIGNED_INDEX_TYPE ix = -1; ix <= data.nx + 2; ++ix)
+                {
+                    T_dataType dx = data.dxb(ix);
+                    data.dxab(ix, iy, iz) = dydz * data.hy(ix) * data.hz1(ix, iy);
+                    data.dyab(ix, iy, iz) = dx * dz * data.hz2(ix, iy);
+                    data.dzab(ix, iy, iz) = dx * dy * data.hy(ix);
+                    data.cv(ix, iy, iz) = dx * dydz * data.hyc(ix) * data.hzc(ix, iy);
+                }
+            };
+            pw::applyKernel(l, pw::Range(-1, data.ny + 2), pw::Range(-1, data.nz + 2));
+            pw::fence();
+        }
+
+        {
+            // Fix negative y boundaries
+            pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iz) { data.dyab(ix, -2, iz) = data.dxb(ix) * data.dzb(iz) * data.hz2(ix, -2); }, pw::Range(-1, data.nx + 2), pw::Range(-1, data.nz + 2));
+            pw::fence();
+        }
+        {
+            // Fix negative z boundaries
+            auto l = LAMBDA(T_indexType ix, T_indexType iy)
             {
                 T_dataType dx = data.dxb(ix);
-                data.dxab(ix, iy, iz) = dydz * data.hy(ix) * data.hz1(ix, iy);
-                data.dyab(ix, iy, iz) = dx * dz * data.hz2(ix, iy);
-                data.dzab(ix, iy, iz) = dx * dy * data.hy(ix);
-                data.cv(ix, iy, iz) = dx * dydz * data.hyc(ix) * data.hzc(ix, iy);
-            }
-        };
-        portableWrapper::applyKernel(l, portableWrapper::Range(-1, data.ny + 2), portableWrapper::Range(-1, data.nz + 2));
-        portableWrapper::fence();
-    } 
-
-    {
-        // Fix negative y boundaries
-        portableWrapper::applyKernel(LAMBDA(T_indexType ix, T_indexType iz)
+                T_dataType dy = data.dyc(iy);
+                data.dzab(ix, iy, -2) = dx * dy * data.hyc(ix);
+            };
+            pw::applyKernel(l, pw::Range(-1, data.nx + 2), pw::Range(-1, data.ny + 2));
+            pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy) { data.dzab(ix, iy, -2) = data.dxb(ix) * data.dyb(iy) * data.hyc(ix); }, pw::Range(-1, data.nx + 2), pw::Range(-1, data.ny + 2));
+            pw::fence();
+        }
+        {
+            // Node centred areas and volumes
+            auto l = LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz)
             {
-               data.dyab(ix, -2, iz) = data.dxb(ix) * data.dzb(iz) * data.hz2(ix, -2);
-            }, portableWrapper::Range(-1, data.nx + 2), portableWrapper::Range(-1, data.nz + 2));
-        portableWrapper::fence();
-    }
-    {
-        // Fix negative z boundaries
-        auto l = LAMBDA(T_indexType ix, T_indexType iy)
+                T_dataType dx = data.dxb(ix);
+                T_dataType dy = data.dyb(iy);
+                T_dataType dz = data.dzc(iz);
+                T_dataType dydz = dy * dz;
+                data.dxac(ix, iy, iz) = dydz * data.hyc(ix) * data.hz2(ix, iy);
+                data.dyac(ix, iy, iz) = dx * dz * data.hz1(ix, iy);
+                data.dzac(ix, iy, iz) = dx * dy * data.hy(ix);
+                data.cvc(ix, iy, iz) = dx * dydz * hyv(ix) * data.hz(ix, iy);
+            };
+            pw::applyKernel(l, pw::Range(-1, data.nx + 2), pw::Range(-1, data.ny + 2), pw::Range(-1, data.nz + 2));
+            pw::fence();
+        }
+        // Set up the cartesian coordinates array
+        if (data.geometry == geometryType::Cartesian)
         {
-            T_dataType dx = data.dxb(ix);
-            T_dataType dy = data.dyc(iy);
-            data.dzab(ix, iy, -2) = dx * dy * data.hyc(ix);
-        };
-        portableWrapper::applyKernel(l, portableWrapper::Range(-1, data.nx + 2), portableWrapper::Range(-1, data.ny + 2));
-        portableWrapper::applyKernel(LAMBDA(T_indexType ix, T_indexType iy)
+            auto l = LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz)
             {
-               data.dzab(ix, iy,-2) = data.dxb(ix) * data.dyb(iy) * data.hyc(ix);
-            }, portableWrapper::Range(-1, data.nx + 2), portableWrapper::Range(-1, data.ny + 2));
-        portableWrapper::fence();
-    }
-    {
-        // Node centred areas and volumes
-        auto l = LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz)
+                data.x(ix, iy, iz) = data.xc(ix);
+                data.y(ix, iy, iz) = data.yc(iy);
+                data.z(ix, iy, iz) = data.zc(iz);
+            };
+            pw::applyKernel(l, pw::Range(-1, data.nx + 2), pw::Range(-1, data.ny + 2), pw::Range(-1, data.nz + 2));
+            pw::fence();
+        }
+        else if (data.geometry == geometryType::Cylindrical)
         {
-            T_dataType dx = data.dxb(ix);
-            T_dataType dy = data.dyb(iy);
-            T_dataType dz = data.dzc(iz);
-            T_dataType dydz = dy * dz;
-            data.dxac(ix, iy, iz) = dydz * data.hyc(ix) * data.hz2(ix, iy);
-            data.dyac(ix, iy, iz) = dx * dz * data.hz1(ix, iy);
-            data.dzac(ix, iy, iz) = dx * dy * data.hy(ix);
-            data.cvc(ix, iy, iz) = dx * dydz * hyv(ix) * data.hz(ix, iy);
-        };
-        portableWrapper::applyKernel(l, portableWrapper::Range(-1, data.nx + 2), portableWrapper::Range(-1, data.ny + 2), portableWrapper::Range(-1, data.nz + 2));
-        portableWrapper::fence();
-    }
-    // Set up the cartesian coordinates array
-    if (data.geometry == geometryType::Cartesian)
-    {
-        auto l = LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz)
+            auto l = LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz)
+            {
+                T_dataType r = data.xb(ix);
+                T_dataType theta = data.yb(iy);
+                T_dataType zz = data.zb(iz);
+                data.x(ix, iy, iz) = r;
+                data.y(ix, iy, iz) = theta;
+                data.z(ix, iy, iz) = zz;
+                data.xp(ix, iy, iz) = r * std::cos(theta);
+                data.yp(ix, iy, iz) = r * std::sin(theta);
+                data.zp(ix, iy, iz) = zz;
+            };
+            pw::applyKernel(l, pw::Range(-2, data.nx + 2), pw::Range(-2, data.ny + 2), pw::Range(-2, data.nz + 2));
+            pw::fence();
+        }
+        else if (data.geometry == geometryType::Spherical)
         {
-            data.x(ix, iy, iz) = data.xc(ix);
-            data.y(ix, iy, iz) = data.yc(iy);
-            data.z(ix, iy, iz) = data.zc(iz);
-        };
-        portableWrapper::applyKernel(l, portableWrapper::Range(-1, data.nx + 2), portableWrapper::Range(-1, data.ny + 2), portableWrapper::Range(-1, data.nz + 2));
-        portableWrapper::fence();
-    }
-    else if (data.geometry == geometryType::Cylindrical)
-    {
-        auto l = LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz)
-        {
-            T_dataType r = data.xb(ix);
-            T_dataType theta = data.yb(iy);
-            T_dataType zz = data.zb(iz);
-            data.x(ix, iy, iz) = r;
-            data.y(ix, iy, iz) = theta;
-            data.z(ix, iy, iz) = zz;
-            data.xp(ix, iy, iz) = r * std::cos(theta);
-            data.yp(ix, iy, iz) = r * std::sin(theta);
-            data.zp(ix, iy, iz) = zz;
-        };
-        portableWrapper::applyKernel(l, portableWrapper::Range(-2, data.nx + 2), portableWrapper::Range(-2, data.ny + 2), portableWrapper::Range(-2, data.nz + 2));
-        portableWrapper::fence();
-    }
-    else if (data.geometry == geometryType::Spherical)
-    {
-        auto l = LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz)
-        {
-            T_dataType r = data.xb(ix);
-            T_dataType theta = data.yb(iy);
-            T_dataType phi = data.zb(iz);
-            data.x(ix, iy, iz) = r;
-            data.y(ix, iy, iz) = theta;
-            data.z(ix, iy, iz) = phi;
-            data.xp(ix, iy, iz) = r * std::sin(theta) * std::cos(phi);
-            data.yp(ix, iy, iz) = r * std::sin(theta) * std::sin(phi);
-            data.zp(ix, iy, iz) = r * std::cos(theta);
-        };
-        portableWrapper::applyKernel(l, portableWrapper::Range(-2, data.nx + 2), portableWrapper::Range(-2, data.ny + 2), portableWrapper::Range(-2, data.nz + 2));
-        portableWrapper::fence();
+            auto l = LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz)
+            {
+                T_dataType r = data.xb(ix);
+                T_dataType theta = data.yb(iy);
+                T_dataType phi = data.zb(iz);
+                data.x(ix, iy, iz) = r;
+                data.y(ix, iy, iz) = theta;
+                data.z(ix, iy, iz) = phi;
+                data.xp(ix, iy, iz) = r * std::sin(theta) * std::cos(phi);
+                data.yp(ix, iy, iz) = r * std::sin(theta) * std::sin(phi);
+                data.zp(ix, iy, iz) = r * std::cos(theta);
+            };
+            pw::applyKernel(l, pw::Range(-2, data.nx + 2), pw::Range(-2, data.ny + 2), pw::Range(-2, data.nz + 2));
+            pw::fence();
+        }
     }
 }

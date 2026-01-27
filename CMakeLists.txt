@@ -2,13 +2,15 @@ cmake_minimum_required(VERSION 3.10)
 
 option(ARRAY_BOUNDS_CHECKING "Enable array bounds checking" OFF)
 option(ARRAY_SET_CHECKER "Enable array set element checking" OFF)
-option(MPI "Unable MPI" OFF)
+option(MPI "Enable MPI" OFF)
 option(KOKKOS_CUDA "Enable Kokkos with CUDA backend" OFF)
 option(KOKKOS_HIP "Enable Kokkos with HIP backend" OFF)
 option(KOKKOS_SYCL "Enable Kokkos with SYCL backend" OFF)
 option(KOKKOS_OPENMP "Enable Kokkos with OpenMP backend" OFF)
 option(NATIVE_CUDA "Compile all .cpp files with nvcc as CUDA" OFF)
 option(DEBUG_TO_STDERR "Send debug output to stderr instead of log files" OFF)
+option(NO_NATIVE_UNROLL "Do not unroll loops in the native OpenMP implementation" OFF)
+option(NATIVE_LOOP_COLLAPSE "Enable loop collapse in the native OpenMP implementation" 0)
 
 # New: debug compile mode (separate from DEBUG_LEVEL)
 option(DEBUG_COMPILE "Compile with -O0 (debug compile mode)" OFF)
@@ -17,10 +19,17 @@ option(DEBUG_COMPILE "Compile with -O0 (debug compile mode)" OFF)
 set(DEBUG_LEVEL "0" CACHE STRING "Debug level: 0 (none), 1, 2, 3")
 set_property(CACHE DEBUG_LEVEL PROPERTY STRINGS 0 1 2 3)
 
+#Debug level must be 0, 1, 2, or 3
 if(NOT DEBUG_LEVEL MATCHES "^[0-3]$")
   message(WARNING "Invalid DEBUG_LEVEL='${DEBUG_LEVEL}'. Resetting to 0.")
   set(DEBUG_LEVEL "0" CACHE STRING "Debug level: 0 (none), 1, 2, 3" FORCE)
 endif()
+
+#Native loop collapse level (0 = disabled)
+if(NATIVE_LOOP_COLLAPSE GREATER 0)
+  add_compile_definitions(NATIVE_LOOP_COLLAPSE=${NATIVE_LOOP_COLLAPSE})
+endif()
+
 
 # Make available to sources and flags
 add_compile_definitions(DEBUG_LEVEL=${DEBUG_LEVEL})
@@ -57,7 +66,7 @@ if(KOKKOS_SYCL)
 endif()
 
 if(KOKKOS_OPENMP)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -DKOKKOS_OPENMP")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -DKOKKOS_OPENMP -pg")
 endif()
 
 if(NATIVE_CUDA)
@@ -98,7 +107,7 @@ if(DEBUG_COMPILE)
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O0 -g")
   set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -O0 -g")
 else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -mtune=native -g -fopenmp -DUSE_HDF5")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -mtune=native -g -fopenmp -DUSE_HDF5 -DUNROLL_NATIVE_OPENMP_LOOPS")
   # Preserve existing CUDA/HIP default flags (they may be extended elsewhere)
 endif()
 
@@ -141,6 +150,8 @@ target_include_directories(sams PRIVATE ${HDF5_INCLUDE_DIRS})
 target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/src/PhysicsPackages/LARE")
 target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/src/PhysicsPackages/LARE/include")
 target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/include/harness")
+target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/include/runner")
+target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/include/boundaryConditions")
 target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/include")
 target_link_libraries(sams PRIVATE ${HDF5_LIBRARIES})
 

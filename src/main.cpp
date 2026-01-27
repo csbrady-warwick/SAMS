@@ -4,6 +4,7 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include "harness.h"
 #include "shared_data.h"
 #include "include/timer.h"
 #include "axisRegistry.h"
@@ -11,50 +12,58 @@
 #include "mpiManager.h"
 #include "welcome.h"
 
-int main(int argc, char *argv[]){ 
+#include "builtInBoundaryConditions.h"
 
+#include "runner.h"
+
+int main(int argc, char *argv[]){
 
     //Initialize MPI
     SAMS::MPI::initialize(argc, argv);
 
-    //Get the MPI manager for the default communicator
-    SAMS::MPIManager<SAMS::MPI_DECOMPOSITION_RANK>& mpi = SAMS::getMPIManager<SAMS::MPI_DECOMPOSITION_RANK>();
+    SAMS::harness harness;
+
+    SAMS::runner<
+        LARE::LARE3D> runner;
+
+    runner.initialize(argc, argv);
+    runner.activateSimulation("LARE3D");
+    runner.initializeSimulations();
 
     SAMS::printWelcomeMessage();
     //MPI auto decomposition
+    auto& mpi = harness.MPIManager;
+    auto& axisReg = harness.axisRegistry;
+    auto& varReg = harness.variableRegistry;
     mpi.autoDecomposition({false,false,false});
     //Initialize portable wrapper
     portableWrapper::initialize(argc, argv);
     SAMS::finishWelcomeMessage();
 
     //Create the simulation (LARE) and data objects
-    simulation S;
-    simulationData data;
+    LARE::LARE3D S(harness);
+    LARE::simulationData data;
 
     //Setup control variables
     S.controlvariables(data);
     data.visc2_norm=data.visc2;
 
     //Register axes and attach them to MPI dimensions
-    auto& axRegistry = SAMS::getaxisRegistry();
-    axRegistry.registerAxis("X", SAMS::MPIAxis(0));
-    axRegistry.registerAxis("Y", SAMS::MPIAxis(1));
-    axRegistry.registerAxis("Z", SAMS::MPIAxis(2));
+    axisReg.registerAxis("X", SAMS::MPIAxis(0));
+    axisReg.registerAxis("Y", SAMS::MPIAxis(1));
+    axisReg.registerAxis("Z", SAMS::MPIAxis(2));
     //Tell LARE to register its variables
     S.registerVars();
     //Other simulations would register their variables here too
 
     //Set the axis domains and decompose them
-    axRegistry.setDomain("X", data.nx, data.x_min, data.x_max);
-    axRegistry.setDomain("Y", data.ny, data.y_min, data.y_max);
-    axRegistry.setDomain("Z", data.nz, data.z_min, data.z_max);
+    axisReg.setDomain("X", data.nx, data.x_min, data.x_max);
+    axisReg.setDomain("Y", data.ny, data.y_min, data.y_max);
+    axisReg.setDomain("Z", data.nz, data.z_min, data.z_max);
 
     mpi.decomposeAllAxes();
 
-    //Allocate all registered variables
-    auto& varRegistry = SAMS::getvariableRegistry();
-    auto& axisRegistry = SAMS::getaxisRegistry();
-    varRegistry.allocateAll();
+    varReg.allocateAll();
 
     //Tell LARE to grab the shared allocated variables
 		S.allocate(data);
@@ -73,7 +82,7 @@ int main(int argc, char *argv[]){
     while (true)
     {
       SAMS::cout << data.step << " " << data.time << std::endl;      
-      if (data.step%10==0) S.output(data);
+      //if (data.step%10==0) S.output(data);
       if ((data.step >= data.nsteps && data.nsteps >= 0) || (data.time >= data.t_end))
         break;
 
@@ -88,8 +97,8 @@ int main(int argc, char *argv[]){
 		S.output(data);
 
 		S.manager.clear();
-    axisRegistry.finalize();
-    varRegistry.finalize();
+    axisReg.finalize();
+    varReg.finalize();
     portableWrapper::finalize();
     SAMS::MPI::finalize();
 

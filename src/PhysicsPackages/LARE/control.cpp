@@ -14,118 +14,135 @@
 */
 #include "shared_data.h"
 
-void simulation::controlvariables(simulationData &data) {
+namespace LARE
+{
 
-  data.nx=128; // Number of cells in the x-direction
-  data.ny=128; // Number of cells in the y-direction
-  data.nz=128; // Number of cells in the z-direction
+  namespace pw = portableWrapper;
 
-  data.dt_multiplier = 0.8; // Default multiplier for time step
-  data.dt=0.0;
+  void LARE3D::controlvariables(simulationData &data)
+  {
 
-  // Maximum number of iterations; if nsteps < 0, run until t_end
-  data.nsteps = 100;
-  data.t_end = 60.0 * 60.0 * 24.0; // One day in seconds
+    data.nx = 256; // Number of cells in the x-direction
+    data.ny = 256; // Number of cells in the y-direction
+    data.nz = 256; // Number of cells in the z-direction
 
-  // Geometry options: cartesian, cylindrical, spherical
-  data.geometry = geometryType::Cartesian;
+    data.dt_multiplier = 0.8; // Default multiplier for time step
+    data.dt = 0.0;
 
-  // Domain limits
-  data.x_min = -1.0e6;
-  data.x_max = 1.0e6;
-  data.y_min = -1.0e6;
-  data.y_max = 1.0e6;
-  data.z_min = -1.0e6;
-  data.z_max = 1.0e6;
+    // Maximum number of iterations; if nsteps < 0, run until t_end
+    data.nsteps = 10;
+    data.t_end = 60.0 * 60.0 * 24.0 * 24.0; // One day in seconds
 
-  // Boundary conditions
-  data.xbc_min = BCType::BC_OTHER;
-  data.xbc_max = BCType::BC_OTHER;
-  data.ybc_min = BCType::BC_OTHER;
-  data.ybc_max = BCType::BC_OTHER;
-  data.zbc_min = BCType::BC_OTHER;
-  data.zbc_max = BCType::BC_OTHER;
+    // Geometry options: cartesian, cylindrical, spherical
+    data.geometry = geometryType::Cartesian;
 
-  // Grid stretching
-  data.x_stretch = false;
-  data.y_stretch = false;
-  data.z_stretch = false;
+    // Domain limits
+    data.x_min = -1.0e6;
+    data.x_max = 1.0e6;
+    data.y_min = -1.0e6;
+    data.y_max = 1.0e6;
+    data.z_min = -1.0e6;
+    data.z_max = 1.0e6;
 
-  // Shock viscosity coefficients
-  data.visc1 = 0.1;
-  data.visc2 = 1.0;
+    // Boundary conditions
+    data.xbc_min = BCType::BC_OTHER;
+    data.xbc_max = BCType::BC_OTHER;
+    data.ybc_min = BCType::BC_OTHER;
+    data.ybc_max = BCType::BC_OTHER;
+    data.zbc_min = BCType::BC_OTHER;
+    data.zbc_max = BCType::BC_OTHER;
 
-  // Ratio of specific heat capacities
-  data.gas_gamma = 1.4;
+    // Grid stretching
+    data.x_stretch = false;
+    data.y_stretch = false;
+    data.z_stretch = false;
 
-  // Average mass of an ion in proton masses
-  data.mf = 1.2;
+    // Shock viscosity coefficients
+    data.visc1 = 0.1;
+    data.visc2 = 1.0;
 
-  // Resistive MHD options
-  data.resistiveMHD = false;
-  data.eta_background = 1.e-10;
-  data.j_max = 1.0;
-  data.eta0 = 2.e-10;
+    // Ratio of specific heat capacities
+    data.gas_gamma = 1.4;
 
-  // Remap kinetic energy correction
-  data.rke = true;
+    // Average mass of an ion in proton masses
+    data.mf = 1.2;
 
-  // Output frequency and directory
-  data.dt_snapshots = 10.0;
-}
+    // Resistive MHD options
+    data.resistiveMHD = false;
+    data.eta_background = 1.e-10;
+    data.j_max = 1.0;
+    data.eta0 = 2.e-10;
 
-void simulation::initial_conditions(simulationData &data) {
+    // Remap kinetic energy correction
+    data.rke = false;
 
-  using Range = portableWrapper::Range;
-
-  SAMS::cout << "Setting up initial conditions" << std::endl;
-  // Set initial conditions for the simulation
-  portableWrapper::assign(data.vx,0.0);
-  portableWrapper::assign(data.vy,0.0);
-  portableWrapper::assign(data.vz,0.0);
- 
-  T_dataType v0 = 0.e3;
-  T_dataType a0 = 1.0e5;
-  T_dataType a2 = a0 * a0;
-  T_dataType amp = 0.5;
-
-  T_dataType xcentre = 0.0;
-  T_dataType ycentre = 0.5e6;
-  T_dataType zcentre = 0.0;
-
-  if (SAMS::getMPIManager().getRank() == 0 && SAMS::getMPIManager().getSize() > 1) {
-    amp=0.0;
+    // Output frequency and directory
+    data.dt_snapshots = 10.0;
   }
 
-  // Set the initial thermal energy of electrons and ions
-  T_dataType T0 = 1.e6;
-  T_dataType energy = 0.5 * kb_si * T0 / mh_si / (data.gas_gamma - 1.0);
-  portableWrapper::assign(data.energy_electron, energy);
-  portableWrapper::assign(data.energy_ion, energy);
+  void LARE3D::initial_conditions(simulationData &data)
+  {
 
-  portableWrapper::applyKernel(
-    LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
-      T_dataType x2 = (data.xc(ix)-xcentre) * (data.xc(ix)-xcentre);
-      T_dataType y2 = (data.yc(iy)-ycentre) * (data.yc(iy)-ycentre);
-      T_dataType z2 = (data.zc(iz)-zcentre) * (data.zc(iz)-zcentre);
-      T_dataType r2 = x2 + y2 + z2;
-      T_dataType v = v0 * std::exp(-r2 / a2);
-      data.energy_electron(ix,iy,iz) *= (1.0+amp*std::exp(-r2 / a2));
-      data.energy_ion(ix,iy,iz) *= (1.0+amp*std::exp(-r2 / a2));
-    },
-    portableWrapper::Range(-1, data.nx+2),
-    portableWrapper::Range(-1, data.ny+2),
-    portableWrapper::Range(-1, data.nz+2)
-  );
+    using Range = pw::Range;
 
+    SAMS::cout << "Setting up initial conditions" << std::endl;
+    // Set initial conditions for the LARE3D
+    pw::assign(data.vx, 0.0);
+    pw::assign(data.vy, 0.0);
+    pw::assign(data.vz, 0.0);
 
-  T_dataType bmult = 000.0;
-  portableWrapper::assign(data.bx,0.01*bmult);
-  portableWrapper::assign(data.by,0.00*bmult);
-  portableWrapper::assign(data.bz,0.00*bmult);
-  // Set the initial density field in kg/m^3
-  portableWrapper::assign(data.rho, 1.0e-6);
+    pw::assign(data.rho, 1.0);
+    pw::assign(data.energy_electron, 1.0);
+    pw::assign(data.energy_ion, 1.0);
 
-  if (data.rke) portableWrapper::assign(data.delta_ke, 0.0);
+    pw::assign(data.bx, 0.0);
+    pw::assign(data.by, 0.0);
+    pw::assign(data.bz, 0.0);
 
+    return;
+
+    T_dataType v0 = 0.e3;
+    T_dataType a0 = 1.0e5;
+    T_dataType a2 = a0 * a0;
+    T_dataType amp = 0.5;
+
+    T_dataType xcentre = 0.0;
+    T_dataType ycentre = 0.5e6;
+    T_dataType zcentre = 0.0;
+
+    if (harness.MPIManager.getRank() == 0 && harness.MPIManager.getSize() > 1)
+    {
+      amp = 0.0;
+    }
+
+    // Set the initial thermal energy of electrons and ions
+    T_dataType T0 = 1.e6;
+    T_dataType energy = 0.5 * kb_si * T0 / mh_si / (data.gas_gamma - 1.0);
+    pw::assign(data.energy_electron, energy);
+    pw::assign(data.energy_ion, energy);
+
+    pw::applyKernel(
+        LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
+          T_dataType x2 = (data.xc(ix) - xcentre) * (data.xc(ix) - xcentre);
+          T_dataType y2 = (data.yc(iy) - ycentre) * (data.yc(iy) - ycentre);
+          T_dataType z2 = (data.zc(iz) - zcentre) * (data.zc(iz) - zcentre);
+          T_dataType r2 = x2 + y2 + z2;
+          T_dataType v = v0 * std::exp(-r2 / a2);
+          data.energy_electron(ix, iy, iz) *= (1.0 + amp * std::exp(-r2 / a2));
+          data.energy_ion(ix, iy, iz) *= (1.0 + amp * std::exp(-r2 / a2));
+        },
+        pw::Range(-1, data.nx + 2),
+        pw::Range(-1, data.ny + 2),
+        pw::Range(-1, data.nz + 2));
+
+    T_dataType bmult = 000.0;
+    pw::assign(data.bx, 0.01 * bmult);
+    pw::assign(data.by, 0.00 * bmult);
+    pw::assign(data.bz, 0.00 * bmult);
+    // Set the initial density field in kg/m^3
+    pw::assign(data.rho, 1.0e-6);
+
+    if (data.rke)
+      pw::assign(data.delta_ke, 0.0);
+  }
 }
