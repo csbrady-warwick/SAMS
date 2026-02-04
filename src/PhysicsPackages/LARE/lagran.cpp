@@ -285,15 +285,15 @@ namespace LARE
             T_indexType izm = iz - 1, izp = iz + 1;
             T_indexType iym = iy - 1, iyp = iy + 1;
             T_indexType ixm = ix - 1;
-            T_dataType a1 = pow(data.vx(ixm, iym, iz) - data.vx(ix, iym, iz), 2) + pow(data.vy(ixm, iym, iz) - data.vy(ix, iym, iz), 2) + pow(data.vz(ixm, iym, iz) - data.vz(ix, iym, iz), 2);
-            T_dataType a2 = pow(data.vx(ix, iym, iz) - data.vx(ix, iy, iz), 2) + pow(data.vy(ix, iym, iz) - data.vy(ix, iy, iz), 2) + pow(data.vz(ix, iym, iz) - data.vz(ix, iy, iz), 2);
-            T_dataType a3 = pow(data.vx(ix, iy, iz) - data.vx(ixm, iy, iz), 2) + pow(data.vy(ix, iy, iz) - data.vy(ixm, iy, iz), 2) + pow(data.vz(ix, iy, iz) - data.vz(ixm, iy, iz), 2);
-            T_dataType a4 = pow(data.vx(ixm, iy, iz) - data.vx(ixm, iym, iz), 2) + pow(data.vy(ixm, iy, iz) - data.vy(ixm, iym, iz), 2) + pow(data.vz(ixm, iy, iz) - data.vz(ixm, iym, iz), 2);
+            T_dataType a1 = pow(data.vx(ixm, iym, izm) - data.vx(ix, iym, izm), 2) + pow(data.vy(ixm, iym, izm) - data.vy(ix, iym, izm), 2) + pow(data.vz(ixm, iym, izm) - data.vz(ix, iym, izm), 2);
+            T_dataType a2 = pow(data.vx(ix,  iym, izm) - data.vx(ix, iy, izm), 2) + pow(data.vy(ix, iym, izm) - data.vy(ix, iy, izm), 2) + pow(data.vz(ix, iym, izm) - data.vz(ix, iy, izm), 2);
+            T_dataType a3 = pow(data.vx(ix,  iy, izm) - data.vx(ixm, iy, izm), 2) + pow(data.vy(ix, iy, izm) - data.vy(ixm, iy, izm), 2) + pow(data.vz(ix, iy, izm) - data.vz(ixm, iy, izm), 2);
+            T_dataType a4 = pow(data.vx(ixm, iy, izm) - data.vx(ixm, iym, izm), 2) + pow(data.vy(ixm, iy, izm) - data.vy(ixm, iym, izm), 2) + pow(data.vz(ixm, iy, izm) - data.vz(ixm, iym, izm), 2);
 
-            T_dataType a5 = pow(data.vx(ixm, iym, izp) - data.vx(ix, iym, izp), 2) + pow(data.vy(ixm, iym, izp) - data.vy(ix, iym, izp), 2) + pow(data.vz(ixm, iym, izp) - data.vz(ix, iym, izp), 2);
-            T_dataType a6 = pow(data.vx(ix, iym, izp) - data.vx(ix, iy, izp), 2) + pow(data.vy(ix, iym, izp) - data.vy(ix, iy, izp), 2) + pow(data.vz(ix, iym, izp) - data.vz(ix, iy, izp), 2);
-            T_dataType a7 = pow(data.vx(ix, iy, izp) - data.vx(ixm, iy, izp), 2) + pow(data.vy(ix, iy, izp) - data.vy(ixm, iy, izp), 2) + pow(data.vz(ix, iy, izp) - data.vz(ixm, iy, izp), 2);
-            T_dataType a8 = pow(data.vx(ixm, iy, izp) - data.vx(ixm, iym, izp), 2) + pow(data.vy(ixm, iy, izp) - data.vy(ixm, iym, izp), 2) + pow(data.vz(ixm, iy, izp) - data.vz(ixm, iym, izp), 2);
+            T_dataType a5 = pow(data.vx(ixm, iym, iz) - data.vx(ix, iym, iz), 2) + pow(data.vy(ixm, iym, iz) - data.vy(ix, iym, iz), 2) + pow(data.vz(ixm, iym, iz) - data.vz(ix, iym, iz), 2);
+            T_dataType a6 = pow(data.vx(ix, iym, iz) - data.vx(ix, iy, iz), 2) + pow(data.vy(ix, iym, iz) - data.vy(ix, iy, iz), 2) + pow(data.vz(ix, iym, iz) - data.vz(ix, iy, iz), 2);
+            T_dataType a7 = pow(data.vx(ix, iy, iz) - data.vx(ixm, iy, iz), 2) + pow(data.vy(ix, iy, iz) - data.vy(ixm, iy, iz), 2) + pow(data.vz(ix, iy, iz) - data.vz(ixm, iy, iz), 2);
+            T_dataType a8 = pow(data.vx(ixm, iy, iz) - data.vx(ixm, iym, iz), 2) + pow(data.vy(ixm, iy, iz) - data.vy(ixm, iym, iz), 2) + pow(data.vz(ixm, iy, iz) - data.vz(ixm, iym, iz), 2);
 
             T_dataType a9 = pow(data.vx(ix, iy, izm) - data.vx(ix, iy, iz), 2) + pow(data.vy(ix, iy, izm) - data.vy(ix, iy, iz), 2) + pow(data.vz(ix, iy, izm) - data.vz(ix, iy, iz), 2);
             T_dataType a10 = pow(data.vx(ixm, iy, izm) - data.vx(ixm, iy, iz), 2) + pow(data.vy(ixm, iy, izm) - data.vy(ixm, iy, iz), 2) + pow(data.vz(ixm, iy, izm) - data.vz(ixm, iy, iz), 2);
