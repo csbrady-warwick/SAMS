@@ -309,18 +309,18 @@ namespace LARE
             T_dataType dz = data.dzb(iz) * data.hz2(ix, iy);
 
             data.visc_heat(ix, iy, iz) =
-                -0.25 * dy * dz * data.alpha1(ix, iy, iz) * a1 
-                -0.25 * dx * dz * data.alpha2(ix, iy, iz) * a2 
-                -0.25 * dy * dz * data.alpha1(ix, iyp, iz) * a3 
-                -0.25 * dx * dz * data.alpha2(ixm, iy, iz) * a4 
-                -0.25 * dy * dz * data.alpha1(ix, iy, izp) * a5 
-                -0.25 * dx * dz * data.alpha2(ix, iy, izp) * a6 
-                -0.25 * dy * dz * data.alpha1(ix, iyp, izp) * a7 
-                -0.25 * dx * dz * data.alpha2(ixm, iy, izp) * a8 
-                -0.25 * dy * dy * data.alpha3(ix, iy, iz) * a9 
-                -0.25 * dx * dy * data.alpha3(ixm, iy, iz) * a10 
-                -0.25 * dy * dy * data.alpha3(ixm, iym, iz) * a11 
-                -0.25 * dx * dy * data.alpha3(ix, iym, iz) * a12;
+                -0.25 * dy * dz * data.alpha1(ix,  iy,  iz) * a1 
+                -0.25 * dx * dz * data.alpha2(ix,  iy,  iz) * a2 
+                -0.25 * dy * dz * data.alpha1(ix,  iyp, iz) * a3 
+                -0.25 * dx * dz * data.alpha2(ixm, iy,  iz) * a4 
+                -0.25 * dy * dz * data.alpha1(ix,  iy,  izp) * a5 
+                -0.25 * dx * dz * data.alpha2(ix,  iy,  izp) * a6 
+                -0.25 * dy * dz * data.alpha1(ix,  iyp, izp) * a7 
+                -0.25 * dx * dz * data.alpha2(ixm, iy,  izp) * a8 
+                -0.25 * dx * dy * data.alpha3(ix,  iy,  iz) * a9 
+                -0.25 * dx * dy * data.alpha3(ixm, iy,  iz) * a10 
+                -0.25 * dx * dy * data.alpha3(ixm, iym, iz) * a11 
+                -0.25 * dx * dy * data.alpha3(ix,  iym, iz) * a12;
 
             data.visc_heat(ix, iy, iz) = data.visc_heat(ix, iy, iz) / data.cv(ix, iy, iz);
         },
