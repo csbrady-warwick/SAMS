@@ -46,24 +46,21 @@ namespace LARE
         volumeArray curlb;     // Curl of the magnetic field
     };
 
-    void shock_viscosity(simulationData &data, lagranData &lagran);
-    void set_dt(simulationData &data, lagranData &lagran);
-    void resistive_effects(LARE3D &sim, simulationData &data, lagranData &lagran);
-    void rkstep(LARE3D &sim, simulationData &data, lagranData &lagran);
-    void bstep(LARE3D &sim, simulationData &data, lagranData &lagran);
-    void predictor_corrector_step(LARE3D &sim, simulationData &data, lagranData &lagran);
-    void b_field_and_cv1_update(LARE3D &sim, simulationData &data, lagranData &lagran);
-    void shock_heating(simulationData &data, lagranData &lagran);
+    void shock_viscosity(simulationData &data);
+    void resistive_effects(LARE3D &sim, simulationData &data);
+    void rkstep(simulationData &data);
+    void bstep(LARE3D &sim, simulationData &data);
+    void b_field_and_cv1_update(simulationData &data);
+    void shock_heating(simulationData &data);
 
-    DEVICEPREFIX INLINE T_dataType edge_viscosity(simulationData data, lagranData lagran,
+    DEVICEPREFIX INLINE T_dataType edge_viscosity(const simulationData &data,
                                                   T_dataType dvdots, T_dataType dx, T_dataType dxm, T_dataType dxp, T_dataType cs_edge,
                                                   int i0, int i1, int i2, int i3,
                                                   int j0, int j1, int j2, int j3,
                                                   int k0, int k1, int k2, int k3)
     {
-
         dvdots = pw::min(0.0, dvdots);
-        T_dataType rho_edge = 2.0 * lagran.rho_v(i1, j1, k1) * lagran.rho_v(i2, j2, k2) / (lagran.rho_v(i1, j1, k1) + lagran.rho_v(i2, j2, k2));
+        T_dataType rho_edge = 2.0 * data.rho_v(i1, j1, k1) * data.rho_v(i2, j2, k2) / (data.rho_v(i1, j1, k1) + data.rho_v(i2, j2, k2));
 
         T_dataType dvx = data.vx(i1, j1, k1) - data.vx(i2, j2, k2);
         T_dataType dvy = data.vy(i1, j1, k1) - data.vy(i2, j2, k2);
@@ -72,12 +69,6 @@ namespace LARE
         T_dataType dv = std::sqrt(dv2);
 
         T_dataType psi = 0.0;
-        /*if (dv * data.dt/dx < 1.e-14) {
-            dvdots = 0.0;
-        } else {
-            dvdots/= dv;
-        }*/
-
         dvdots = dv * data.dt / dx < 1.e-14 ? 0.0 : dvdots / dv;
 
         T_dataType dvxm = data.vx(i0, j0, k0) - data.vx(i1, j1, k1);
@@ -88,10 +79,6 @@ namespace LARE
         T_dataType dvzp = data.vz(i2, j2, k2) - data.vz(i3, j3, k3);
 
         T_dataType rl = 1.0, rr = 1.0;
-        /*if (dv * data.dt / dx >= 1.e-14) {
-            rl = (dvxp * dvx + dvyp * dvy + dvzp * dvz) * dx / (dxp * dv2);
-            rr = (dvxm * dvx + dvym * dvy + dvzm * dvz) * dx / (dxm * dv2);
-        }*/
 
         rl = dv * data.dt / dx < 1.e-14 ? 1.0 : (dvxp * dvx + dvyp * dvy + dvzp * dvz) * dx / (dxp * dv2);
         rr = dv * data.dt / dx < 1.e-14 ? 1.0 : (dvxm * dvx + dvym * dvy + dvzm * dvz) * dx / (dxm * dv2);
@@ -105,43 +92,13 @@ namespace LARE
         return q_k_bar * (1.0 - psi) * dvdots;
     }
 
-    void LARE3D::lagrangian_step(simulationData &data)
-    {
-        lagranData lagran;
-        pw::portableArrayManager lagranManager;
+    void LARE3D::lagrangian_step(simulationData &data, SAMS::controlFunctions &controlFns)
+    {   
         using Range = pw::Range;
-        Range xcp = pw::Range(0, data.nx + 1);
-        Range ycp = pw::Range(0, data.ny + 1);
-        Range zcp = pw::Range(0, data.nz + 1);
-        Range xcpp = pw::Range(0, data.nx + 2);
-        Range ycpp = pw::Range(0, data.ny + 2);
-        Range zcpp = pw::Range(0, data.nz + 2);
+
         Range xbp = pw::Range(-1, data.nx + 1);
         Range ybp = pw::Range(-1, data.ny + 1);
         Range zbp = pw::Range(-1, data.nz + 1);
-        // Allocate arrays using the portableArrayManager
-        lagranManager.allocate(lagran.bx1, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-        lagranManager.allocate(lagran.by1, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-        lagranManager.allocate(lagran.bz1, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-        lagranManager.allocate(lagran.alpha1, xcp, ycpp, zcpp);
-        lagranManager.allocate(lagran.alpha2, xbp, ycp, zcpp);
-        lagranManager.allocate(lagran.alpha3, data.xcLocalRange, data.ycLocalRange, zcp);
-        lagranManager.allocate(lagran.visc_heat, xcp, ycp, zcp);
-        lagranManager.allocate(lagran.pressure, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-        lagranManager.allocate(lagran.p_e, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-        lagranManager.allocate(lagran.p_i, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-        lagranManager.allocate(lagran.rho_v, xbp, ybp, zbp);
-        lagranManager.allocate(lagran.cv_v, xbp, ybp, zbp);
-        lagranManager.allocate(lagran.fx, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
-        lagranManager.allocate(lagran.fy, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
-        lagranManager.allocate(lagran.fz, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
-        lagranManager.allocate(lagran.fx_visc, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
-        lagranManager.allocate(lagran.fy_visc, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
-        lagranManager.allocate(lagran.fz_visc, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
-        lagranManager.allocate(lagran.flux_x, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
-        lagranManager.allocate(lagran.flux_y, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
-        lagranManager.allocate(lagran.flux_z, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
-        lagranManager.allocate(lagran.curlb, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
 
         // All of the arrays are deallocated when lagranManager goes out of scope
         //  Initialize bx1, by1, bz1, p_e, p_i, pressure
@@ -157,13 +114,13 @@ namespace LARE
             T_indexType izm = iz - 1;
             T_indexType iym = iy - 1;
             T_indexType ixm = ix - 1;
-            lagran.bx1(ix, iy, iz) = 0.5 * (bxl(ix, iy, iz) + bxl(ixm, iy, iz));
-            lagran.by1(ix, iy, iz) = 0.5 * (byl(ix, iy, iz) + byl(ix, iym, iz));
-            lagran.bz1(ix, iy, iz) = 0.5 * (bzl(ix, iy, iz) + bzl(ix, iy, izm));
+            data.bx1(ix, iy, iz) = 0.5 * (bxl(ix, iy, iz) + bxl(ixm, iy, iz));
+            data.by1(ix, iy, iz) = 0.5 * (byl(ix, iy, iz) + byl(ix, iym, iz));
+            data.bz1(ix, iy, iz) = 0.5 * (bzl(ix, iy, iz) + bzl(ix, iy, izm));
 
-            lagran.p_e(ix, iy, iz) = (gas_gamma - 1.0) * data.rho(ix, iy, iz) * energy_el(ix, iy, iz);
-            lagran.p_i(ix, iy, iz) = (gas_gamma - 1.0) * data.rho(ix, iy, iz) * energy_il(ix, iy, iz);
-            lagran.pressure(ix, iy, iz) = lagran.p_e(ix, iy, iz) + lagran.p_i(ix, iy, iz);
+            data.p_e(ix, iy, iz) = (gas_gamma - 1.0) * data.rho(ix, iy, iz) * energy_el(ix, iy, iz);
+            data.p_i(ix, iy, iz) = (gas_gamma - 1.0) * data.rho(ix, iy, iz) * energy_il(ix, iy, iz);
+            data.pressure(ix, iy, iz) = data.p_e(ix, iy, iz) + data.p_i(ix, iy, iz);
         },
                         data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
 
@@ -190,13 +147,13 @@ namespace LARE
                                 cvl(ixp, iy, izp) +
                                 cvl(ix, iyp, izp) +
                                 cvl(ixp, iyp, izp);
-            lagran.rho_v(ix, iy, iz) = sum_rho_cv / sum_cv;
-            lagran.cv_v(ix, iy, iz) = 0.125 * sum_cv; // Assuming a constant factor for control volume
+            data.rho_v(ix, iy, iz) = sum_rho_cv / sum_cv;
+            data.cv_v(ix, iy, iz) = 0.125 * sum_cv; // Assuming a constant factor for control volume
         },
                         xbp, ybp, zbp);
 
-        shock_viscosity(data, lagran);
-        set_dt(data, lagran);
+        shock_viscosity(data);
+        controlFns.calculateTimestep();
         if (data.resistiveMHD)
         {
             T_dataType dt_sub = data.dtr;
@@ -207,20 +164,15 @@ namespace LARE
             for (int i = 0; i < substeps; ++i)
             {
                 this->eta_calc(data);
-                resistive_effects(*this, data, lagran);
+                resistive_effects(*this, data);
             }
             data.dt = actual_dt; // Restore the original dt after sub-stepping
         }
 
-        predictor_corrector_step(*this, data, lagran);
-
-        this->energy_bcs(data);
-        this->density_bcs(data);
-        this->velocity_bcs(data);
-        // Lagrangian step data is automatically deallocated when lagranManager goes out of scope
+        this->predictor_step(data);
     }
 
-    void shock_viscosity(simulationData &data, lagranData &lagran)
+    void shock_viscosity(simulationData &data)
     {
         using Range = pw::Range;
         data.visc2_norm = 0.25 * (data.gas_gamma + 1.0) * data.visc2;
@@ -234,15 +186,15 @@ namespace LARE
         svManager.allocate(cs_v, xp1, yp1, zp1);
 
         pw::assign(data.p_visc, 0.0);
-        pw::assign(lagran.visc_heat, 0.0);
+        pw::assign(data.visc_heat, 0.0);
 
         // Compute cs
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
         T_dataType rmin = pw::max(data.rho(ix, iy, iz), data.none_zero);
-        T_dataType b2 = lagran.bx1(ix, iy, iz) * lagran.bx1(ix, iy, iz) +
-                        lagran.by1(ix, iy, iz) * lagran.by1(ix, iy, iz) +
-                        lagran.bz1(ix, iy, iz) * lagran.bz1(ix, iy, iz);
-        T_dataType p = lagran.pressure(ix, iy, iz);
+        T_dataType b2 = data.bx1(ix, iy, iz) * data.bx1(ix, iy, iz) +
+                        data.by1(ix, iy, iz) * data.by1(ix, iy, iz) +
+                        data.bz1(ix, iy, iz) * data.bz1(ix, iy, iz);
+        T_dataType p = data.pressure(ix, iy, iz);
         cs(ix, iy, iz) = std::sqrt((data.gas_gamma * p + b2) / rmin); }, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
         pw::fence();
         // Compute cs_v
@@ -260,7 +212,7 @@ namespace LARE
             cs(ixp, iy, izp) * data.cv(ixp, iy, izp) +
             cs(ix, iyp, izp) * data.cv(ix, iyp, izp) +
             cs(ixp, iyp, izp) * data.cv(ixp, iyp, izp);
-        cs_v(ix, iy, iz) = 0.125 * sum / lagran.cv_v(ix, iy, iz); }, xp1, yp1, zp1);
+        cs_v(ix, iy, iz) = 0.125 * sum / data.cv_v(ix, iy, iz); }, xp1, yp1, zp1);
         pw::fence();
 
         // alpha1
@@ -281,7 +233,7 @@ namespace LARE
             T_dataType dvdots = -(data.vx(i1, j1, k1) - data.vx(i2, j2, k2));
             T_dataType cs_edge = pw::min(cs_v(i1, j1, k1), cs_v(i2, j2, k2));
             // Edge viscosities from Caramana
-            lagran.alpha1(ix, iy, iz) = edge_viscosity(data, lagran,
+            data.alpha1(ix, iy, iz) = edge_viscosity(data,
                                                        dvdots, dx, dxm, dxp, cs_edge,
                                                        i0, i1, i2, i3, j0, j1, j2, j3, k0, k1, k2, k3);
         },
@@ -301,7 +253,7 @@ namespace LARE
         T_dataType dxm = data.dyb(iym) * data.hy(ix);
         T_dataType dvdots = -(data.vy(i1, j1, k1) - data.vy(i2, j2, k2));
         T_dataType cs_edge = pw::min(cs_v(i1, j1, k1), cs_v(i2, j2, k2));
-        lagran.alpha2(ix, iy, iz) = edge_viscosity(data, lagran,
+        data.alpha2(ix, iy, iz) = edge_viscosity(data,
             dvdots, dx, dxm, dxp,
             cs_edge,
             i0, i1, i2, i3, j0, j1, j2, j3, k0, k1, k2, k3); }, Range(-1, data.nx + 1), Range(0, data.ny + 1), Range(0, data.nz + 2));
@@ -320,7 +272,7 @@ namespace LARE
         T_dataType dxm = data.dzb(izm) * data.hz(ix, iy);
         T_dataType dvdots = -(data.vz(i1, j1, k1) - data.vz(i2, j2, k2));
         T_dataType cs_edge = pw::min(cs_v(i1, j1, k1), cs_v(i2, j2, k2));
-        lagran.alpha3(ix, iy, iz) = edge_viscosity(data, lagran,
+        data.alpha3(ix, iy, iz) = edge_viscosity(data,
             dvdots, dx, dxm, dxp,
             cs_edge,
             i0, i1, i2, i3, j0, j1, j2, j3,
@@ -348,24 +300,35 @@ namespace LARE
             T_dataType a11 = pow(data.vx(ixm, iym, izm) - data.vx(ixm, iym, iz), 2) + pow(data.vy(ixm, iym, izm) - data.vy(ixm, iym, iz), 2) + pow(data.vz(ixm, iym, izm) - data.vz(ixm, iym, iz), 2);
             T_dataType a12 = pow(data.vx(ix, iym, izm) - data.vx(ix, iym, iz), 2) + pow(data.vy(ix, iym, izm) - data.vy(ix, iym, iz), 2) + pow(data.vz(ix, iym, izm) - data.vz(ix, iym, iz), 2);
 
-            data.p_visc(ix, iy, iz) = pw::max(data.p_visc(ix, iy, iz), -lagran.alpha1(ix, iy, iz) * std::sqrt(a1));
-            data.p_visc(ix, iy, iz) = pw::max(data.p_visc(ix, iy, iz), -lagran.alpha2(ix, iy, iz) * std::sqrt(a2));
-            data.p_visc(ix, iy, iz) = pw::max(data.p_visc(ix, iy, iz), -lagran.alpha3(ix, iy, iz) * std::sqrt(a9));
+            data.p_visc(ix, iy, iz) = pw::max(data.p_visc(ix, iy, iz), -data.alpha1(ix, iy, iz) * std::sqrt(a1));
+            data.p_visc(ix, iy, iz) = pw::max(data.p_visc(ix, iy, iz), -data.alpha2(ix, iy, iz) * std::sqrt(a2));
+            data.p_visc(ix, iy, iz) = pw::max(data.p_visc(ix, iy, iz), -data.alpha3(ix, iy, iz) * std::sqrt(a9));
 
             T_dataType dx = data.dxb(ix);
             T_dataType dy = data.dyb(iy) * data.hyc(ix);
             T_dataType dz = data.dzb(iz) * data.hz2(ix, iy);
 
-            lagran.visc_heat(ix, iy, iz) =
-                -0.25 * dy * dz * lagran.alpha1(ix, iy, iz) * a1 - 0.25 * dx * dz * lagran.alpha2(ix, iy, iz) * a2 - 0.25 * dy * dz * lagran.alpha1(ix, iyp, iz) * a3 - 0.25 * dx * dz * lagran.alpha2(ixm, iy, iz) * a4 - 0.25 * dy * dz * lagran.alpha1(ix, iy, izp) * a5 - 0.25 * dx * dz * lagran.alpha2(ix, iy, izp) * a6 - 0.25 * dy * dz * lagran.alpha1(ix, iyp, izp) * a7 - 0.25 * dx * dz * lagran.alpha2(ixm, iy, izp) * a8 - 0.25 * dy * dy * lagran.alpha3(ix, iy, iz) * a9 - 0.25 * dx * dy * lagran.alpha3(ixm, iy, iz) * a10 - 0.25 * dy * dy * lagran.alpha3(ixm, iym, iz) * a11 - 0.25 * dx * dy * lagran.alpha3(ix, iym, iz) * a12;
+            data.visc_heat(ix, iy, iz) =
+                -0.25 * dy * dz * data.alpha1(ix, iy, iz) * a1 
+                -0.25 * dx * dz * data.alpha2(ix, iy, iz) * a2 
+                -0.25 * dy * dz * data.alpha1(ix, iyp, iz) * a3 
+                -0.25 * dx * dz * data.alpha2(ixm, iy, iz) * a4 
+                -0.25 * dy * dz * data.alpha1(ix, iy, izp) * a5 
+                -0.25 * dx * dz * data.alpha2(ix, iy, izp) * a6 
+                -0.25 * dy * dz * data.alpha1(ix, iyp, izp) * a7 
+                -0.25 * dx * dz * data.alpha2(ixm, iy, izp) * a8 
+                -0.25 * dy * dy * data.alpha3(ix, iy, iz) * a9 
+                -0.25 * dx * dy * data.alpha3(ixm, iy, iz) * a10 
+                -0.25 * dy * dy * data.alpha3(ixm, iym, iz) * a11 
+                -0.25 * dx * dy * data.alpha3(ix, iym, iz) * a12;
 
-            lagran.visc_heat(ix, iy, iz) = lagran.visc_heat(ix, iy, iz) / data.cv(ix, iy, iz);
+            data.visc_heat(ix, iy, iz) = data.visc_heat(ix, iy, iz) / data.cv(ix, iy, iz);
         },
                         Range(0, data.nx + 1), Range(0, data.ny + 1), Range(0, data.nz + 1));
 
-        pw::assign(lagran.fx_visc, 0.0);
-        pw::assign(lagran.fy_visc, 0.0);
-        pw::assign(lagran.fz_visc, 0.0);
+        pw::assign(data.fx_visc, 0.0);
+        pw::assign(data.fy_visc, 0.0);
+        pw::assign(data.fz_visc, 0.0);
 
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
             T_indexType izm = iz - 1, izp = iz + 1;
@@ -376,54 +339,56 @@ namespace LARE
             T_dataType dy = data.dyb(iy) * data.hyc(ix);
             T_dataType dz = data.dzb(iz) * data.hz2(ix, iy);
 
-            T_dataType a1 = lagran.alpha1(ix, iyp, izp) * dy * dz;
-            T_dataType a2 = lagran.alpha1(ixp, iyp, izp) * dy * dz;
-            T_dataType a3 = lagran.alpha2(ix, iy, izp) * dx * dz;
-            T_dataType a4 = lagran.alpha2(ix, iyp, izp) * dx * dz;
-            T_dataType a5 = lagran.alpha3(ix, iy, iz) * dx * dy;
-            T_dataType a6 = lagran.alpha3(ix, iy, izp) * dx * dy;
+            T_dataType a1 = data.alpha1(ix, iyp, izp) * dy * dz;
+            T_dataType a2 = data.alpha1(ixp, iyp, izp) * dy * dz;
+            T_dataType a3 = data.alpha2(ix, iy, izp) * dx * dz;
+            T_dataType a4 = data.alpha2(ix, iyp, izp) * dx * dz;
+            T_dataType a5 = data.alpha3(ix, iy, iz) * dx * dy;
+            T_dataType a6 = data.alpha3(ix, iy, izp) * dx * dy;
 
-            lagran.fx_visc(ix, iy, iz) =
+            data.fx_visc(ix, iy, iz) =
                 (a1 * (data.vx(ix, iy, iz) - data.vx(ixm, iy, iz)) +
                  a2 * (data.vx(ix, iy, iz) - data.vx(ixp, iy, iz)) +
                  a3 * (data.vx(ix, iy, iz) - data.vx(ix, iym, iz)) +
                  a4 * (data.vx(ix, iy, iz) - data.vx(ix, iyp, iz)) +
                  a5 * (data.vx(ix, iy, iz) - data.vx(ix, iy, izm)) +
                  a6 * (data.vx(ix, iy, iz) - data.vx(ix, iy, izp))) /
-                lagran.cv_v(ix, iy, iz);
+                data.cv_v(ix, iy, iz);
 
-            lagran.fy_visc(ix, iy, iz) =
+            data.fy_visc(ix, iy, iz) =
                 (a1 * (data.vy(ix, iy, iz) - data.vy(ixm, iy, iz)) +
                  a2 * (data.vy(ix, iy, iz) - data.vy(ixp, iy, iz)) +
                  a3 * (data.vy(ix, iy, iz) - data.vy(ix, iym, iz)) +
                  a4 * (data.vy(ix, iy, iz) - data.vy(ix, iyp, iz)) +
                  a5 * (data.vy(ix, iy, iz) - data.vy(ix, iy, izm)) +
                  a6 * (data.vy(ix, iy, iz) - data.vy(ix, iy, izp))) /
-                lagran.cv_v(ix, iy, iz);
+                data.cv_v(ix, iy, iz);
 
-            lagran.fz_visc(ix, iy, iz) =
+            data.fz_visc(ix, iy, iz) =
                 (a1 * (data.vz(ix, iy, iz) - data.vz(ixm, iy, iz)) +
                  a2 * (data.vz(ix, iy, iz) - data.vz(ixp, iy, iz)) +
                  a3 * (data.vz(ix, iy, iz) - data.vz(ix, iym, iz)) +
                  a4 * (data.vz(ix, iy, iz) - data.vz(ix, iyp, iz)) +
                  a5 * (data.vz(ix, iy, iz) - data.vz(ix, iy, izm)) +
                  a6 * (data.vz(ix, iy, iz) - data.vz(ix, iy, izp))) /
-                lagran.cv_v(ix, iy, iz);
+                data.cv_v(ix, iy, iz);
         },
                         Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
     }
 
-    void set_dt(simulationData &data, lagranData &lagran)
+    void LARE3D::set_dt(simulationData &data)
     {
-
         using Range = pw::Range;
 
         int i0 = data.geometry == geometryType::Cartesian ? 0 : 1;
 
         // Now need to do a map and reduction
-        data.dt = data.dt_multiplier *
+        T_dataType dt1 = data.dt_multiplier *
                   pw::applyReduction(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
+        T_indexType izm = iz - 1;
+        T_indexType iym = iy - 1;
+        T_indexType ixm = ix - 1;
         T_dataType dx = data.dxb(ix);
         T_dataType dy = data.dyb(iy);
         T_dataType dz = data.dzb(iz);
@@ -433,22 +398,48 @@ namespace LARE
         T_dataType dhz = dz * data.hzc(ix, iy);
 
         T_dataType rho0 = pw::max(data.rho(ix, iy, iz), data.none_zero);
-        T_dataType cs2 = data.gas_gamma * lagran.pressure(ix, iy, iz) / rho0;
+        T_dataType cs2 = data.gas_gamma * data.pressure(ix, iy, iz) / rho0;
 
         T_dataType w1 = (data.bx(ix, iy, iz) * data.bx(ix, iy, iz) +
                          data.by(ix, iy, iz) * data.by(ix, iy, iz) +
-                         data.bz(ix, iy, iz) * data.bz(ix, iy, iz)) / data.mu0_si / rho0;
+                         data.bz(ix, iy, iz) * data.bz(ix, iy, iz)) / data.mu0 / rho0;
         T_dataType c_visc2 = data.p_visc(ix, iy, iz) / rho0;
 
-        T_dataType length  = pw::min({dhx, dhy, dhz});
+        T_dataType length  = pw::min(dhx, dhy, dhz);
 
-        T_dataType t1  = length / (std::sqrt(c_visc2) + std::sqrt(cs2 + w1 + c_visc2));
+        T_dataType dt1  = length / (std::sqrt(c_visc2) + std::sqrt(cs2 + w1 + c_visc2));
 
-        return t1; }, LAMBDA(T_dataType & a, const T_dataType &b) { a = pw::min(a, b); }, data.largest_number, Range(i0, data.nx), Range(0, data.ny), Range(0, data.nz));
 
-        std::cout << "Timestep set to " << data.dt << "\n";
+        T_dataType ax = 0.25 * data.dxab(ix,iy,iz);
+        T_dataType ay = 0.25 * data.dyab(ix,iy,iz);
+        T_dataType az = 0.25 * data.dzab(ix,iy,iz);
 
-        data.time += data.dt;
+        T_dataType vxbm = (data.vx(ixm,iy ,iz ) + data.vx(ixm,iym,iz ) + data.vx(ixm,iy ,izm) + data.vx(ixm,iym,izm)) * ax;
+        T_dataType vxbp = (data.vx(ix ,iy ,iz ) + data.vx(ix ,iym,iz ) + data.vx(ix ,iy ,izm) + data.vx(ix ,iym,izm)) * ax;
+        T_dataType vybm = (data.vy(ix ,iym,iz ) + data.vy(ixm,iym,iz ) + data.vy(ix ,iym,izm) + data.vy(ixm,iym,izm)) * ay;
+        T_dataType vybp = (data.vy(ix ,iy ,iz ) + data.vy(ixm,iy ,iz ) + data.vy(ix ,iy ,izm) + data.vy(ixm,iy ,izm)) * ay;
+        T_dataType vzbm = (data.vz(ix ,iy ,izm) + data.vz(ixm,iy ,izm) + data.vz(ix ,iym,izm) + data.vz(ixm,iym,izm)) * az;
+        T_dataType vzbp = (data.vz(ix ,iy ,iz ) + data.vz(ixm,iy ,iz ) + data.vz(ix ,iym,iz ) + data.vz(ixm,iym,iz )) * az;
+        T_dataType dvx = abs(vxbp - vxbm);
+        T_dataType dvy = abs(vybp - vybm);
+        T_dataType dvz = abs(vzbp - vzbm);
+        T_dataType avxm = abs(vxbm);
+        T_dataType avxp = abs(vxbp);
+        T_dataType avym = abs(vybm);
+        T_dataType avyp = abs(vybp);
+        T_dataType avzm = abs(vzbm);
+        T_dataType avzp = abs(vzbp);
+
+        T_dataType volume = data.cv(ix,iy,iz);
+        T_dataType dt2 = volume / pw::max(avxm, avxp, dvx, 1.0e-10 * volume);
+        T_dataType dt3 = volume / pw::max(avym, avyp, dvy, 1.0e-10 * volume);
+        T_dataType dt4 = volume / pw::max(avzm, avzp, dvz, 1.0e-10 * volume);
+
+        return pw::min(dt1, dt2, dt3, dt4);
+        }, LAMBDA(T_dataType & a, const T_dataType &b) { a = pw::min(a, b); }, data.largest_number, Range(i0, data.nx), Range(0, data.ny), Range(0, data.nz));
+
+        data.dt = dt1;
+        data.dtr = data.dt;
     }
 
     void LARE3D::eta_calc(simulationData &data)
@@ -484,36 +475,36 @@ namespace LARE
         pw::fence();
     }
 
-    void resistive_effects(LARE3D &sim, simulationData &data, lagranData &lagran)
+    void resistive_effects(LARE3D &sim, simulationData &data)
     {
         using Range = pw::Range;
 
-        pw::assign(lagran.bx1, data.bx);
-        pw::assign(lagran.by1, data.by);
-        pw::assign(lagran.bz1, data.bz);
+        pw::assign(data.bx1, data.bx);
+        pw::assign(data.by1, data.by);
+        pw::assign(data.bz1, data.bz);
 
-        rkstep(sim, data, lagran);
-        bstep(sim, data, lagran);
+        rkstep(data);
+        bstep(sim, data);
 
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
         T_indexType izm = iz - 1;
         T_indexType iym = iy - 1;
         T_indexType ixm = ix - 1;
         T_dataType sum_curlb =
-            lagran.curlb(ix, iy, iz) + lagran.curlb(ixm, iy, iz) +
-            lagran.curlb(ix, iym, iz) + lagran.curlb(ixm, iym, iz) +
-            lagran.curlb(ix, iy, izm) + lagran.curlb(ixm, iy, izm) +
-            lagran.curlb(ix, iym, izm) + lagran.curlb(ixm, iym, izm);
+            data.curlb(ix, iy, iz) + data.curlb(ixm, iy, iz) +
+            data.curlb(ix, iym, iz) + data.curlb(ixm, iym, iz) +
+            data.curlb(ix, iy, izm) + data.curlb(ixm, iy, izm) +
+            data.curlb(ix, iym, izm) + data.curlb(ixm, iym, izm);
 
         data.energy_electron(ix,iy,iz) += sum_curlb * data.dt/(8.0 * data.rho(ix,iy,iz)); }, Range(1, data.nx), Range(1, data.ny), Range(1, data.nz));
         pw::fence();
-        sim.energy_bcs(data);
-        // TODO add ohmic heating
-        // In original code jx_r, jy_r and jz_r are calculated but not used
-        rkstep(sim, data, lagran);
+        sim.energy_bcs();
+
+        //Once more to get j_perp and j_par correct
+        rkstep(data);
     }
 
-    void rkstep(LARE3D &sim, simulationData &data, lagranData &lagran)
+    void rkstep(simulationData &data)
     {
         using Range = pw::Range;
 
@@ -533,17 +524,17 @@ namespace LARE
             T_dataType jy = 0.5 * (jy1 + jy2);
             T_dataType jz = 0.5 * (jz1 + jz2);
 
-            lagran.flux_x(ix, iy, iz) = -jx * data.eta(ix, iy, iz) * data.dxc(ix) * 0.5;
-            lagran.flux_y(ix, iy, iz) = -jy * data.eta(ix, iy, iz) * data.dyc(iy) * 0.5;
-            lagran.flux_z(ix, iy, iz) = -jz * data.eta(ix, iy, iz) * data.dzc(iz) * 0.5;
+            data.flux_x(ix, iy, iz) = -jx * data.eta(ix, iy, iz) * data.dxc(ix) * 0.5;
+            data.flux_y(ix, iy, iz) = -jy * data.eta(ix, iy, iz) * data.dyc(iy) * 0.5;
+            data.flux_z(ix, iy, iz) = -jz * data.eta(ix, iy, iz) * data.dzc(iz) * 0.5;
             // This isn't really curlb. It's actually heat flux
-            lagran.curlb(ix, iy, iz) = data.eta(ix, iy, iz) * (jx * jx + jy * jy + jz * jz);
+            data.curlb(ix, iy, iz) = data.eta(ix, iy, iz) * (jx * jx + jy * jy + jz * jz);
         },
                         Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
     }
 
-    void bstep(LARE3D &sim, simulationData &data, lagranData &lagran)
+    void bstep(LARE3D &sim, simulationData &data)
     {
         using Range = pw::Range;
 
@@ -551,74 +542,74 @@ namespace LARE
         T_indexType izm = iz - 1;
         T_indexType iym = iy - 1;
         T_dataType area = data.dyb(iy) * data.dzb(iz);
-        data.bx(ix, iy, iz) = lagran.bx1(ix, iy, iz) + 
+        data.bx(ix, iy, iz) = data.bx1(ix, iy, iz) + 
         (
-            lagran.flux_x(ix, iy, iz) - 
-            lagran.flux_y(ix, iym, iz) + 
-            lagran.flux_z(ix, iy, izm) - 
-            lagran.flux_z(ix, iym, izm) - 
-            lagran.flux_y(ix, iy, iz) + 
-            lagran.flux_y(ix, iy, izm) - 
-            lagran.flux_y(ix, iym, iz) + 
-            lagran.flux_y(ix, iym, izm)
+            data.flux_z(ix, iy, iz) - 
+            data.flux_z(ix, iym, iz) + 
+            data.flux_z(ix, iy, izm) - 
+            data.flux_z(ix, iym, izm) - 
+            data.flux_y(ix, iy, iz) + 
+            data.flux_y(ix, iy, izm) - 
+            data.flux_y(ix, iym, iz) + 
+            data.flux_y(ix, iym, izm)
         ) * data.dt / area; }, Range(0, data.nx), Range(1, data.ny), Range(1, data.nz));
 
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
         T_indexType izm = iz - 1;
         T_indexType ixm = ix - 1;
         T_dataType area = data.dxb(ix) * data.dzb(iz);
-        data.by(ix, iy, iz) = lagran.by1(ix, iy, iz) + 
+        data.by(ix, iy, iz) = data.by1(ix, iy, iz) + 
         (
-                lagran.flux_x(ix, iy, iz) - 
-                lagran.flux_x(ix, iy, izm) + 
-                lagran.flux_x(ixm, iy, iz) - 
-                lagran.flux_x(ixm, iy, izm) - 
-                lagran.flux_z(ix, iy, iz) + 
-                lagran.flux_z(ixm, iy, iz) - 
-                lagran.flux_z(ix, iy, izm) + 
-                lagran.flux_z(ixm, iy, izm)
+                data.flux_x(ix, iy, iz) - 
+                data.flux_x(ix, iy, izm) + 
+                data.flux_x(ixm, iy, iz) - 
+                data.flux_x(ixm, iy, izm) - 
+                data.flux_z(ix, iy, iz) + 
+                data.flux_z(ixm, iy, iz) - 
+                data.flux_z(ix, iy, izm) + 
+                data.flux_z(ixm, iy, izm)
         ) * data.dt / area; }, Range(1, data.nx), Range(0, data.ny), Range(1, data.nz));
 
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
         T_indexType iym = iy - 1;
         T_indexType ixm = ix - 1;
         T_dataType area = data.dxb(ix) * data.dyb(iy);
-        data.bz(ix, iy, iz) = lagran.bz1(ix, iy, iz) + 
+        data.bz(ix, iy, iz) = data.bz1(ix, iy, iz) + 
         (
-                lagran.flux_y(ix, iy, iz) - 
-                lagran.flux_y(ixm, iy, iz) + 
-                lagran.flux_y(ix, iym, iz) - 
-                lagran.flux_y(ixm, iym, iz) - 
-                lagran.flux_x(ix, iy, iz) + 
-                lagran.flux_x(ix, iym, iz) - 
-                lagran.flux_x(ixm, iy, iz) + 
-                lagran.flux_x(ixm, iym, iz)
+                data.flux_y(ix, iy, iz) - 
+                data.flux_y(ixm, iy, iz) + 
+                data.flux_y(ix, iym, iz) - 
+                data.flux_y(ixm, iym, iz) - 
+                data.flux_x(ix, iy, iz) + 
+                data.flux_x(ix, iym, iz) - 
+                data.flux_x(ixm, iy, iz) + 
+                data.flux_x(ixm, iym, iz)
         ) * data.dt / area; }, Range(1, data.nx), Range(1, data.ny), Range(0, data.nz));
         pw::fence();
-        sim.bfield_bcs(data);
+        sim.bfield_bcs();
     }
 
-    void predictor_corrector_step(LARE3D &sim, simulationData &data, lagranData &lagran)
+    void LARE3D::predictor_step(simulationData &data)
     {
         using Range = pw::Range;
         // Update magnetic field and cell volume at half time step
-        b_field_and_cv1_update(sim, data, lagran);
+        b_field_and_cv1_update(data);
 
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
-        lagran.bx1(ix,iy,iz)*=data.cv1(ix,iy,iz);
-        lagran.by1(ix,iy,iz)*=data.cv1(ix,iy,iz);
-        lagran.bz1(ix,iy,iz)*=data.cv1(ix,iy,iz); }, Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
+        data.bx1(ix,iy,iz)*=data.cv1(ix,iy,iz);
+        data.by1(ix,iy,iz)*=data.cv1(ix,iy,iz);
+        data.bz1(ix,iy,iz)*=data.cv1(ix,iy,iz); }, Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
 
         // Predictor step for energy and pressure
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
             T_dataType dv = data.cv1(ix, iy, iz) / data.cv(ix, iy, iz) - 1.0;
-            T_dataType e1_e = data.energy_electron(ix, iy, iz) - lagran.p_e(ix, iy, iz) * dv / data.rho(ix, iy, iz);
-            T_dataType e1_i = data.energy_ion(ix, iy, iz) - lagran.p_i(ix, iy, iz) * dv / data.rho(ix, iy, iz);
-            e1_i += lagran.visc_heat(ix, iy, iz) * data.dt / 2.0 / data.rho(ix, iy, iz);
+            T_dataType e1_e = data.energy_electron(ix, iy, iz) - data.p_e(ix, iy, iz) * dv / data.rho(ix, iy, iz);
+            T_dataType e1_i = data.energy_ion(ix, iy, iz) - data.p_i(ix, iy, iz) * dv / data.rho(ix, iy, iz);
+            e1_i += data.visc_heat(ix, iy, iz) * data.dt / 2.0 / data.rho(ix, iy, iz);
 
-            lagran.p_e(ix, iy, iz) = e1_e * (data.gas_gamma - 1.0) * data.rho(ix, iy, iz) * data.cv(ix, iy, iz) / data.cv1(ix, iy, iz);
-            lagran.p_i(ix, iy, iz) = e1_i * (data.gas_gamma - 1.0) * data.rho(ix, iy, iz) * data.cv(ix, iy, iz) / data.cv1(ix, iy, iz);
-            lagran.pressure(ix, iy, iz) = lagran.p_e(ix, iy, iz) + lagran.p_i(ix, iy, iz);
+            data.p_e(ix, iy, iz) = e1_e * (data.gas_gamma - 1.0) * data.rho(ix, iy, iz) * data.cv(ix, iy, iz) / data.cv1(ix, iy, iz);
+            data.p_i(ix, iy, iz) = e1_i * (data.gas_gamma - 1.0) * data.rho(ix, iy, iz) * data.cv(ix, iy, iz) / data.cv1(ix, iy, iz);
+            data.pressure(ix, iy, iz) = data.p_e(ix, iy, iz) + data.p_i(ix, iy, iz);
         },
                         Range(0, data.nx + 1), Range(0, data.ny + 1), Range(0, data.nz + 1));
 
@@ -638,27 +629,27 @@ namespace LARE
             T_dataType h2c = data.hyc(ix), h3c = data.hzc(ix, iy);
             T_dataType dhy = h2c * dy, dhz = h3c * dz;
 
-            T_dataType pp = lagran.pressure(ix, iy, iz);
-            T_dataType ppx = lagran.pressure(ixp, iy, iz);
-            T_dataType ppy = lagran.pressure(ix, iyp, iz);
-            T_dataType ppz = lagran.pressure(ix, iy, izp);
-            T_dataType ppxy = lagran.pressure(ixp, iyp, iz);
-            T_dataType ppxz = lagran.pressure(ixp, iy, izp);
-            T_dataType ppyz = lagran.pressure(ix, iyp, izp);
-            T_dataType ppxyz = lagran.pressure(ixp, iyp, izp);
+            T_dataType pp = data.pressure(ix, iy, iz);
+            T_dataType ppx = data.pressure(ixp, iy, iz);
+            T_dataType ppy = data.pressure(ix, iyp, iz);
+            T_dataType ppz = data.pressure(ix, iy, izp);
+            T_dataType ppxy = data.pressure(ixp, iyp, iz);
+            T_dataType ppxz = data.pressure(ixp, iy, izp);
+            T_dataType ppyz = data.pressure(ix, iyp, izp);
+            T_dataType ppxyz = data.pressure(ixp, iyp, izp);
 
             // Add pressure gradient force
             T_dataType w1 = pp + ppy + ppz + ppyz;
             T_dataType w2 = ppx + ppxy + ppxz + ppxyz;
-            lagran.fx(ix, iy, iz) = (w1 - w2) * 0.25 / dx;
+            data.fx(ix, iy, iz) = (w1 - w2) * 0.25 / dx;
 
             w1 = pp + ppx + ppz + ppxz;
             w2 = ppy + ppxy + ppyz + ppxyz;
-            lagran.fy(ix, iy, iz) = (w1 - w2) * 0.25 / dhy;
+            data.fy(ix, iy, iz) = (w1 - w2) * 0.25 / dhy;
 
             w1 = pp + ppx + ppy + ppxy;
             w2 = ppz + ppxz + ppyz + ppxyz;
-            lagran.fz(ix, iy, iz) = (w1 - w2) * 0.25 / dhz;
+            data.fz(ix, iy, iz) = (w1 - w2) * 0.25 / dhz;
 
             // Cell volumes for current calculation
             T_dataType cvx = data.cv1(ix, iy, iz) + data.cv1(ix, iyp, iz) + data.cv1(ix, iy, izp) + data.cv1(ix, iyp, izp);
@@ -671,62 +662,62 @@ namespace LARE
             // Current components
             // Update jx
             // dbz/dy
-            w1 = (lagran.bz1(ix, iy, iz) + lagran.bz1(ixp, iy, iz) + lagran.bz1(ix, iy, izp) + lagran.bz1(ixp, iy, izp)) * h3 / cvy;
-            w2 = (lagran.bz1(ix, iyp, iz) + lagran.bz1(ixp, iyp, iz) + lagran.bz1(ix, iyp, izp) + lagran.bz1(ixp, iyp, izp)) * h3y / cvyp;
+            w1 = (data.bz1(ix, iy, iz) + data.bz1(ixp, iy, iz) + data.bz1(ix, iy, izp) + data.bz1(ixp, iy, izp)) * h3 / cvy;
+            w2 = (data.bz1(ix, iyp, iz) + data.bz1(ixp, iyp, iz) + data.bz1(ix, iyp, izp) + data.bz1(ixp, iyp, izp)) * h3y / cvyp;
             T_dataType jx = (w2 - w1) / dhy / h3c;
 
             // dby/dz
-            w1 = (lagran.by1(ix, iy, iz) + lagran.by1(ixp, iy, iz) + lagran.by1(ix, iyp, iz) + lagran.by1(ixp, iyp, iz)) / cvz;
-            w2 = (lagran.by1(ix, iy, izp) + lagran.by1(ixp, iy, izp) + lagran.by1(ix, iyp, izp) + lagran.by1(ixp, iyp, izp)) / cvzp;
+            w1 = (data.by1(ix, iy, iz) + data.by1(ixp, iy, iz) + data.by1(ix, iyp, iz) + data.by1(ixp, iyp, iz)) / cvz;
+            w2 = (data.by1(ix, iy, izp) + data.by1(ixp, iy, izp) + data.by1(ix, iyp, izp) + data.by1(ixp, iyp, izp)) / cvzp;
             jx -= (w2 - w1) / dhz;
 
             // Update jy
             // dbz/dx
-            w1 = (lagran.bz1(ix, iy, iz) + lagran.bz1(ix, iyp, iz) + lagran.bz1(ix, iy, izp) + lagran.bz1(ix, iyp, izp)) * h3 / cvx;
-            w2 = (lagran.bz1(ixp, iy, iz) + lagran.bz1(ixp, iyp, iz) + lagran.bz1(ixp, iy, izp) + lagran.bz1(ixp, iyp, izp)) * h3x / cvxp;
+            w1 = (data.bz1(ix, iy, iz) + data.bz1(ix, iyp, iz) + data.bz1(ix, iy, izp) + data.bz1(ix, iyp, izp)) * h3 / cvx;
+            w2 = (data.bz1(ixp, iy, iz) + data.bz1(ixp, iyp, iz) + data.bz1(ixp, iy, izp) + data.bz1(ixp, iyp, izp)) * h3x / cvxp;
             T_dataType jy = -(w2 - w1) / dx / h3c;
 
             // dbx/dz
-            w1 = (lagran.bx1(ix, iy, iz) + lagran.bx1(ixp, iy, iz) + lagran.bx1(ix, iyp, iz) + lagran.bx1(ixp, iyp, iz)) / cvz;
-            w2 = (lagran.bx1(ix, iy, izp) + lagran.bx1(ixp, iy, izp) + lagran.bx1(ix, iyp, izp) + lagran.bx1(ixp, iyp, izp)) / cvzp;
+            w1 = (data.bx1(ix, iy, iz) + data.bx1(ixp, iy, iz) + data.bx1(ix, iyp, iz) + data.bx1(ixp, iyp, iz)) / cvz;
+            w2 = (data.bx1(ix, iy, izp) + data.bx1(ixp, iy, izp) + data.bx1(ix, iyp, izp) + data.bx1(ixp, iyp, izp)) / cvzp;
             jy += (w2 - w1) / dhz;
 
             // Update jz
             // dby/dx
-            w1 = (lagran.by1(ix, iy, iz) + lagran.by1(ix, iyp, iz) + lagran.by1(ix, iy, izp) + lagran.by1(ix, iyp, izp)) * h2 / cvx;
-            w2 = (lagran.by1(ixp, iy, iz) + lagran.by1(ixp, iyp, iz) + lagran.by1(ixp, iy, izp) + lagran.by1(ixp, iyp, izp)) * h2x / cvxp;
+            w1 = (data.by1(ix, iy, iz) + data.by1(ix, iyp, iz) + data.by1(ix, iy, izp) + data.by1(ix, iyp, izp)) * h2 / cvx;
+            w2 = (data.by1(ixp, iy, iz) + data.by1(ixp, iyp, iz) + data.by1(ixp, iy, izp) + data.by1(ixp, iyp, izp)) * h2x / cvxp;
             T_dataType jz = (w2 - w1) / dx / h2c;
 
             // dbx/dy
-            w1 = (lagran.bx1(ix, iy, iz) + lagran.bx1(ixp, iy, iz) + lagran.bx1(ix, iy, izp) + lagran.bx1(ixp, iy, izp)) / cvy;
-            w2 = (lagran.bx1(ix, iyp, iz) + lagran.bx1(ixp, iyp, iz) + lagran.bx1(ix, iyp, izp) + lagran.bx1(ixp, iyp, izp)) / cvyp;
+            w1 = (data.bx1(ix, iy, iz) + data.bx1(ixp, iy, iz) + data.bx1(ix, iy, izp) + data.bx1(ixp, iy, izp)) / cvy;
+            w2 = (data.bx1(ix, iyp, iz) + data.bx1(ixp, iyp, iz) + data.bx1(ix, iyp, izp) + data.bx1(ixp, iyp, izp)) / cvyp;
             jz -= (w2 - w1) / dhy;
 
             // Average B field at cell center
-            T_dataType bxv = (lagran.bx1(ix, iy, iz) + lagran.bx1(ixp, iy, iz) + lagran.bx1(ix, iyp, iz) + lagran.bx1(ixp, iyp, iz) + lagran.bx1(ix, iy, izp) + lagran.bx1(ixp, iy, izp) + lagran.bx1(ix, iyp, izp) + lagran.bx1(ixp, iyp, izp)) / (cvx + cvxp);
-            T_dataType byv = (lagran.by1(ix, iy, iz) + lagran.by1(ixp, iy, iz) + lagran.by1(ix, iyp, iz) + lagran.by1(ixp, iyp, iz) + lagran.by1(ix, iy, izp) + lagran.by1(ixp, iy, izp) + lagran.by1(ix, iyp, izp) + lagran.by1(ixp, iyp, izp)) / (cvx + cvxp);
-            T_dataType bzv = (lagran.bz1(ix, iy, iz) + lagran.bz1(ixp, iy, iz) + lagran.bz1(ix, iyp, iz) + lagran.bz1(ixp, iyp, iz) + lagran.bz1(ix, iy, izp) + lagran.bz1(ixp, iy, izp) + lagran.bz1(ix, iyp, izp) + lagran.bz1(ixp, iyp, izp)) / (cvx + cvxp);
+            T_dataType bxv = (data.bx1(ix, iy, iz) + data.bx1(ixp, iy, iz) + data.bx1(ix, iyp, iz) + data.bx1(ixp, iyp, iz) + data.bx1(ix, iy, izp) + data.bx1(ixp, iy, izp) + data.bx1(ix, iyp, izp) + data.bx1(ixp, iyp, izp)) / (cvx + cvxp);
+            T_dataType byv = (data.by1(ix, iy, iz) + data.by1(ixp, iy, iz) + data.by1(ix, iyp, iz) + data.by1(ixp, iyp, iz) + data.by1(ix, iy, izp) + data.by1(ixp, iy, izp) + data.by1(ix, iyp, izp) + data.by1(ixp, iyp, izp)) / (cvx + cvxp);
+            T_dataType bzv = (data.bz1(ix, iy, iz) + data.bz1(ixp, iy, iz) + data.bz1(ix, iyp, iz) + data.bz1(ixp, iyp, iz) + data.bz1(ix, iy, izp) + data.bz1(ixp, iy, izp) + data.bz1(ix, iyp, izp) + data.bz1(ixp, iyp, izp)) / (cvx + cvxp);
 
             // Add JxB force
-            lagran.fx(ix, iy, iz) += (jy * bzv - jz * byv) / mu0_si;
-            lagran.fy(ix, iy, iz) += (jz * bxv - jx * bzv) / mu0_si;
-            lagran.fz(ix, iy, iz) += (jx * byv - jy * bxv) / mu0_si;
+            data.fx(ix, iy, iz) += (jy * bzv - jz * byv) / data.mu0;
+            data.fy(ix, iy, iz) += (jz * bxv - jx * bzv) / data.mu0;
+            data.fz(ix, iy, iz) += (jx * byv - jy * bxv) / data.mu0;
 
             // Add gravity force
-            // lagran.fx(ix, iy, iz) -= lagran.rho_v(ix, iy, iz) * data.grav_r(ix);
-            // lagran.fz(ix, iy, iz) -= lagran.rho_v(ix, iy, iz) * data.grav_z(iz);
+            // data.fx(ix, iy, iz) -= data.rho_v(ix, iy, iz) * data.grav_r(ix);
+            // data.fz(ix, iy, iz) -= data.rho_v(ix, iy, iz) * data.grav_z(iz);
 
             // Geometry corrections
-            /*if (data.geometry == geometryType::Spherical)
+            if (data.geometry == geometryType::Spherical)
             {
               T_dataType cotantheta = 1.0 / tan(data.yb(iy));
-              lagran.fx(ix, iy, iz) += lagran.rho_v(ix, iy, iz) * (data.vy(ix, iy, iz) * data.vy(ix, iy, iz) + data.vz(ix, iy, iz) * data.vz(ix, iy, iz)) / data.xb(ix);
-              lagran.fy(ix, iy, iz) -= lagran.rho_v(ix, iy, iz) * (data.vy(ix, iy, iz) * data.vx(ix, iy, iz) - cotantheta * data.vz(ix, iy, iz) * data.vz(ix, iy, iz)) / data.xb(ix);
-              lagran.fz(ix, iy, iz) -= lagran.rho_v(ix, iy, iz) * (data.vz(ix, iy, iz) * data.vx(ix, iy, iz) + cotantheta * data.vz(ix, iy, iz) * data.vy(ix, iy, iz)) / data.xb(ix);
-            } else if (data.geometry == geometryType::Cylindrical)*/
+              data.fx(ix, iy, iz) += data.rho_v(ix, iy, iz) * (data.vy(ix, iy, iz) * data.vy(ix, iy, iz) + data.vz(ix, iy, iz) * data.vz(ix, iy, iz)) / data.xb(ix);
+              data.fy(ix, iy, iz) -= data.rho_v(ix, iy, iz) * (data.vy(ix, iy, iz) * data.vx(ix, iy, iz) - cotantheta * data.vz(ix, iy, iz) * data.vz(ix, iy, iz)) / data.xb(ix);
+              data.fz(ix, iy, iz) -= data.rho_v(ix, iy, iz) * (data.vz(ix, iy, iz) * data.vx(ix, iy, iz) + cotantheta * data.vz(ix, iy, iz) * data.vy(ix, iy, iz)) / data.xb(ix);
+            } else if (data.geometry == geometryType::Cylindrical)
             {
-                lagran.fx(ix, iy, iz) += lagran.rho_v(ix, iy, iz) * data.vy(ix, iy, iz) * data.vy(ix, iy, iz) / data.xb(ix);
-                lagran.fy(ix, iy, iz) -= lagran.rho_v(ix, iy, iz) * data.vy(ix, iy, iz) * data.vx(ix, iy, iz) / data.xb(ix);
+                data.fx(ix, iy, iz) += data.rho_v(ix, iy, iz) * data.vy(ix, iy, iz) * data.vy(ix, iy, iz) / data.xb(ix);
+                data.fy(ix, iy, iz) -= data.rho_v(ix, iy, iz) * data.vy(ix, iy, iz) * data.vx(ix, iy, iz) / data.xb(ix);
             }
 
             // Update positions
@@ -735,30 +726,37 @@ namespace LARE
             data.z(ix, iy, iz) += data.vz(ix, iy, iz) * data.dt;
 
             // Half-step velocities for remap
-            data.vx1(ix, iy, iz) = data.vx(ix, iy, iz) + data.dt / 2.0 * (lagran.fx_visc(ix, iy, iz) + lagran.fx(ix, iy, iz)) / lagran.rho_v(ix, iy, iz);
-            data.vy1(ix, iy, iz) = data.vy(ix, iy, iz) + data.dt / 2.0 * (lagran.fy_visc(ix, iy, iz) + lagran.fy(ix, iy, iz)) / lagran.rho_v(ix, iy, iz);
-            data.vz1(ix, iy, iz) = data.vz(ix, iy, iz) + data.dt / 2.0 * (lagran.fz_visc(ix, iy, iz) + lagran.fz(ix, iy, iz)) / lagran.rho_v(ix, iy, iz);
+            data.vx1(ix, iy, iz) = data.vx(ix, iy, iz) + data.dt / 2.0 * (data.fx_visc(ix, iy, iz) + data.fx(ix, iy, iz)) / data.rho_v(ix, iy, iz);
+            data.vy1(ix, iy, iz) = data.vy(ix, iy, iz) + data.dt / 2.0 * (data.fy_visc(ix, iy, iz) + data.fy(ix, iy, iz)) / data.rho_v(ix, iy, iz);
+            data.vz1(ix, iy, iz) = data.vz(ix, iy, iz) + data.dt / 2.0 * (data.fz_visc(ix, iy, iz) + data.fz(ix, iy, iz)) / data.rho_v(ix, iy, iz);
         },
                         Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
         // Remap (half timestep) boundary conditions
-        sim.remap_v_bcs(data);
+        this->remap_v_bcs();
+    }
+
+    void LARE3D::corrector_step(simulationData &data)
+    {
+
+        using Range = pw::Range;
+        //End of predictor step?
 
         // Divide bx1, by1, bz1 by cv1
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
-        lagran.bx1(ix,iy,iz)/=data.cv1(ix,iy,iz);
-        lagran.by1(ix,iy,iz)/=data.cv1(ix,iy,iz);
-        lagran.bz1(ix,iy,iz)/=data.cv1(ix,iy,iz); }, Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
+        data.bx1(ix,iy,iz)/=data.cv1(ix,iy,iz);
+        data.by1(ix,iy,iz)/=data.cv1(ix,iy,iz);
+        data.bz1(ix,iy,iz)/=data.cv1(ix,iy,iz); }, Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
 
-        shock_heating(data, lagran);
+        shock_heating(data);
 
         // Correct velocities to final values
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
-        data.vx(ix, iy, iz) += data.dt * (lagran.fx_visc(ix, iy, iz) + lagran.fx(ix, iy, iz)) / lagran.rho_v(ix, iy, iz);
-        data.vy(ix, iy, iz) += data.dt * (lagran.fy_visc(ix, iy, iz) + lagran.fy(ix, iy, iz)) / lagran.rho_v(ix, iy, iz);
-        data.vz(ix, iy, iz) += data.dt * (lagran.fz_visc(ix, iy, iz) + lagran.fz(ix, iy, iz)) / lagran.rho_v(ix, iy, iz); }, Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
+        data.vx(ix, iy, iz) += data.dt * (data.fx_visc(ix, iy, iz) + data.fx(ix, iy, iz)) / data.rho_v(ix, iy, iz);
+        data.vy(ix, iy, iz) += data.dt * (data.fy_visc(ix, iy, iz) + data.fy(ix, iy, iz)) / data.rho_v(ix, iy, iz);
+        data.vz(ix, iy, iz) += data.dt * (data.fz_visc(ix, iy, iz) + data.fz(ix, iy, iz)) / data.rho_v(ix, iy, iz); }, Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
-        sim.velocity_bcs(data);
+        velocity_bcs();
 
         // Correct density and energy to final values
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
@@ -786,11 +784,11 @@ namespace LARE
 
             T_dataType dv = (dvxdx + dvydy + dvzdz) * data.dt;
 
-            data.cv1(ix, iy, iz) = vol; // * (1.0 + dv);
+            data.cv1(ix, iy, iz) = vol * (1.0 + dv);
 
             // Energy at end of Lagrangian step
-            data.energy_electron(ix, iy, iz) -= dv * lagran.p_e(ix, iy, iz) / data.rho(ix, iy, iz);
-            data.energy_ion(ix, iy, iz) += (data.dt * lagran.visc_heat(ix, iy, iz) - dv * lagran.p_i(ix, iy, iz)) / data.rho(ix, iy, iz);
+            data.energy_electron(ix, iy, iz) -= dv * data.p_e(ix, iy, iz) / data.rho(ix, iy, iz);
+            data.energy_ion(ix, iy, iz) += (data.dt * data.visc_heat(ix, iy, iz) - dv * data.p_i(ix, iy, iz)) / data.rho(ix, iy, iz);
 
             // Update density based on volume change
             data.rho(ix, iy, iz) /= (1.0 + dv);
@@ -799,9 +797,13 @@ namespace LARE
         },
                         Range(1, data.nx), Range(1, data.ny), Range(1, data.nz));
         pw::fence();
+
+        this->energy_bcs();
+        this->density_bcs();
+        this->velocity_bcs();
     }
 
-    void b_field_and_cv1_update(LARE3D &sim, simulationData &data, lagranData &lagran)
+    void b_field_and_cv1_update(simulationData &data)
     {
         using Range = pw::Range;
 
@@ -867,19 +869,19 @@ namespace LARE
             T_dataType dvydz = (vyb * data.dzab(ix, iy, iz) - vybm * data.dzab(ix, iy, izm)) / vol;
             T_dataType dvzdy = (vzb * data.dyab(ix, iy, iz) - vzbm * data.dyab(ix, iym, iz)) / vol;
 
-            T_dataType w3 = lagran.bx1(ix, iy, iz) * dvxdx + lagran.by1(ix, iy, iz) * dvxdy + lagran.bz1(ix, iy, iz) * dvxdz;
-            T_dataType w4 = lagran.bx1(ix, iy, iz) * dvydx + lagran.by1(ix, iy, iz) * dvydy + lagran.bz1(ix, iy, iz) * dvydz;
-            T_dataType w5 = lagran.bx1(ix, iy, iz) * dvzdx + lagran.by1(ix, iy, iz) * dvzdy + lagran.bz1(ix, iy, iz) * dvzdz;
+            T_dataType w3 = data.bx1(ix, iy, iz) * dvxdx + data.by1(ix, iy, iz) * dvxdy + data.bz1(ix, iy, iz) * dvxdz;
+            T_dataType w4 = data.bx1(ix, iy, iz) * dvydx + data.by1(ix, iy, iz) * dvydy + data.bz1(ix, iy, iz) * dvydz;
+            T_dataType w5 = data.bx1(ix, iy, iz) * dvzdx + data.by1(ix, iy, iz) * dvzdy + data.bz1(ix, iy, iz) * dvzdz;
 
-            lagran.bx1(ix, iy, iz) = (lagran.bx1(ix, iy, iz) + w3 * data.dt / 2.0) / (1.0 + dv);
-            lagran.by1(ix, iy, iz) = (lagran.by1(ix, iy, iz) + w4 * data.dt / 2.0) / (1.0 + dv);
-            lagran.bz1(ix, iy, iz) = (lagran.bz1(ix, iy, iz) + w5 * data.dt / 2.0) / (1.0 + dv);
+            data.bx1(ix, iy, iz) = (data.bx1(ix, iy, iz) + w3 * data.dt / 2.0) / (1.0 + dv);
+            data.by1(ix, iy, iz) = (data.by1(ix, iy, iz) + w4 * data.dt / 2.0) / (1.0 + dv);
+            data.bz1(ix, iy, iz) = (data.bz1(ix, iy, iz) + w5 * data.dt / 2.0) / (1.0 + dv);
         },
                         Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
         pw::fence();
     }
 
-    void shock_heating(simulationData &data, lagranData &lagran)
+    void shock_heating(simulationData &data)
     {
         using Range = pw::Range;
 
@@ -979,13 +981,13 @@ namespace LARE
             T_dataType dy = data.dyb(iy) * data.hyc(ix);
             T_dataType dz = data.dzb(iz) * data.hz2(ix, iy);
 
-            lagran.visc_heat(ix, iy, iz) =
-                (-0.25 * dy * dz * lagran.alpha1(ix, iy, iz) * a1 - 0.25 * dx * dz * lagran.alpha2(ix, iy, iz) * a2 - 0.25 * dy * dz * lagran.alpha1(ix, iyp, iz) * a3 -
-                 0.25 * dx * dz * lagran.alpha2(ixm, iy, iz) * a4 - 0.25 * dy * dz * lagran.alpha1(ix, iy, izp) * a5 - 0.25 * dx * dz * lagran.alpha2(ix, iy, izp) * a6 -
-                 0.25 * dy * dz * lagran.alpha1(ix, iyp, izp) * a7 - 0.25 * dx * dz * lagran.alpha2(ixm, iy, izp) * a8 - 0.25 * dy * dy * lagran.alpha3(ix, iy, iz) * a9 -
-                 0.25 * dx * dy * lagran.alpha3(ixm, iy, iz) * a10 - 0.25 * dy * dy * lagran.alpha3(ixm, iym, iz) * a11 - 0.25 * dx * dy * lagran.alpha3(ix, iym, iz) * a12);
+            data.visc_heat(ix, iy, iz) =
+                (-0.25 * dy * dz * data.alpha1(ix, iy, iz) * a1 - 0.25 * dx * dz * data.alpha2(ix, iy, iz) * a2 - 0.25 * dy * dz * data.alpha1(ix, iyp, iz) * a3 -
+                 0.25 * dx * dz * data.alpha2(ixm, iy, iz) * a4 - 0.25 * dy * dz * data.alpha1(ix, iy, izp) * a5 - 0.25 * dx * dz * data.alpha2(ix, iy, izp) * a6 -
+                 0.25 * dy * dz * data.alpha1(ix, iyp, izp) * a7 - 0.25 * dx * dz * data.alpha2(ixm, iy, izp) * a8 - 0.25 * dy * dy * data.alpha3(ix, iy, iz) * a9 -
+                 0.25 * dx * dy * data.alpha3(ixm, iy, iz) * a10 - 0.25 * dy * dy * data.alpha3(ixm, iym, iz) * a11 - 0.25 * dx * dy * data.alpha3(ix, iym, iz) * a12);
 
-            lagran.visc_heat(ix, iy, iz) = pw::max(lagran.visc_heat(ix, iy, iz) / data.cv(ix, iy, iz), 0.0);
+            data.visc_heat(ix, iy, iz) = pw::max(data.visc_heat(ix, iy, iz) / data.cv(ix, iy, iz), 0.0);
         },
                         Range(0, data.nx + 1), Range(0, data.ny + 1), Range(0, data.nz + 1));
     }

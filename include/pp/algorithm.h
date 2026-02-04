@@ -12,10 +12,9 @@ namespace portableWrapper
      */
     template<typename T, int rank, arrayTags arrayTag, typename T2>
       struct assignValue{
-        T2 value;
         using pa = portableArray<T, rank, arrayTag>;
         pa array;
-
+        T2 value;
         FUNCTORMETHODPREFIX INLINE assignValue(pa arr, T value)
           : array(arr), value(value) {}
 

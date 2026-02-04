@@ -38,20 +38,22 @@ namespace SAMS {
     class variableDef{
         private:
         template<int i>
-        friend struct MPIManager;
+        friend class MPIManager;
 
+        typeHandle varType;
+        int rank=0;
         MPIManager<MPI_DECOMPOSITION_RANK>& mpiMgr;
+        portableWrapper::arrayTags memSpace;
         axisRegistry &axisReg;
         memoryRegistry &memReg;
 
         std::array<dimension, MAX_RANK> dimensions;
-        typeHandle varType;
+        std::array<MPIAxis, MAX_RANK> mpiAxes;
+        std::array<bool, MAX_RANK*2> isEdge;
         MPI_Datatype mpiType;
         MPI_Datatype mpiSend[2*MAX_RANK]; //Array of MPI_Datatypes for sending in each dimension (lower and upper)
         MPI_Datatype mpiRecv[2*MAX_RANK]; //Array of MPI_Datatypes for receiving in each dimension (lower and upper)
         std::array<std::array<std::vector<std::shared_ptr<boundaryConditions>>, 2>, MAX_RANK> boundaryConditionList;
-        int rank=0;
-        portableWrapper::arrayTags memSpace;
 
         /**
          * Pointer to the data. This is a void pointer because the type is not known at compile time.
@@ -111,7 +113,7 @@ namespace SAMS {
         variableDef(SAMS::MPIManager<MPI_DECOMPOSITION_RANK>& mpiManager, axisRegistry &axisRegistry,
             SAMS::memoryRegistry &memRegistry,
             int rank, typeHandle varType, portableWrapper::arrayTags memSpace)
-            : varType(varType), rank(rank), memSpace(memSpace), mpiMgr(mpiManager), axisReg(axisRegistry), memReg(memRegistry)
+            : varType(varType), rank(rank), mpiMgr(mpiManager), memSpace(memSpace), axisReg(axisRegistry), memReg(memRegistry)
             {
             mpiType = gettypeRegistry().getMPIType(varType);
             if(rank<1 || rank>MAX_RANK){
@@ -130,11 +132,9 @@ namespace SAMS {
             setDimensions<0>(args...);
         }
 
-        // No copy assignment because of reference members
+        // No copy assignment or move assignment because of reference members
         variableDef& operator=(const variableDef&) = delete;
-
-        // Move assignment operator is defaulted
-        variableDef& operator=(variableDef&&) = default;
+        variableDef& operator=(variableDef&&) = delete;
 
         //Both copy and move constructors are defaulted
         variableDef(const variableDef&) = default;
@@ -243,6 +243,8 @@ namespace SAMS {
                     //Update the dimension from the Canonical axis. This updates the number of zones
                     //and the MPI decomposition info if applicable
                     dimensions[i].getInfoFrom(src);
+                    isEdge[i*2] = mpiMgr.isEdge(dimensions[i].mpiAxis, SAMS::domain::edges::lower);
+                    isEdge[i*2+1] = mpiMgr.isEdge(dimensions[i].mpiAxis, SAMS::domain::edges::upper);
                 }
                 totalSize *= (dimensions[i].getLocalNativeDomainElements() + dimensions[i].lowerGhosts + dimensions[i].upperGhosts);
             }
@@ -461,14 +463,14 @@ namespace SAMS {
          * @return The boundary condition added (shared_ptr to boundaryConditions)
          */
         template<typename T, typename... Args>
-        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(int dim, SAMS::domain::edges edge, Args... args){
+        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(int dim, SAMS::domain::edges edge, Args&&... args){
             static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef emplaceBoundaryCondition bc must be derived from boundaryConditions");
             if constexpr (std::is_constructible_v<T, Args...>) {
                 //Can construct just from the args
                 return addBoundaryCondition(dim, edge, std::make_shared<T>(args...));
             } else if constexpr (std::is_constructible_v<T, variableDef&, Args...>) {
                 //Need to pass variableDef as first argument
-                return addBoundaryCondition(dim, edge, std::make_shared<T>(*this, args...));
+                return addBoundaryCondition(dim, edge, std::make_shared<T>(*this, std::forward<Args>(args)...));
             } else {
                 static_assert(portableWrapper::alwaysFalse<T>::value, "Error: variableDef emplaceBoundaryCondition cannot construct boundary condition with given arguments");
             }
@@ -482,8 +484,8 @@ namespace SAMS {
          * @note This adds the same boundary condition instance to both edges
          */
         template<typename T, typename... Args>
-        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(int dim, Args... args){
-            std::shared_ptr<boundaryConditions> bc_ptr = emplaceBoundaryCondition<T>(dim, SAMS::domain::edges::lower, args...);
+        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(int dim, Args&&... args){
+            std::shared_ptr<boundaryConditions> bc_ptr = emplaceBoundaryCondition<T>(dim, SAMS::domain::edges::lower, std::forward<Args>(args)...);
             addBoundaryCondition<T>(dim, SAMS::domain::edges::upper, bc_ptr);
             return bc_ptr;
         }
@@ -495,12 +497,48 @@ namespace SAMS {
          * @note This adds the same boundary condition instance to all edges of all dimensions
          */
         template<typename T, typename... Args>
-        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(Args... args){
-            std::shared_ptr<boundaryConditions> bc_ptr = emplaceBoundaryCondition<T>(0, args...);
+        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(Args&&... args){
+            std::shared_ptr<boundaryConditions> bc_ptr = emplaceBoundaryCondition<T>(0, std::forward<Args>(args)...);
             for(int dim=1; dim<rank; dim++){
                 addBoundaryCondition<T>(dim, bc_ptr);
             }
             return bc_ptr;
+        }
+
+        /**
+         * Call all boundary conditions on an edge and dimension
+         * @param dim The dimension to call the boundary conditions on (0 to rank-1)
+         * @param edge The edge to call the boundary conditions on (SAMS::domain::edges)
+         */
+        void applyBoundaryConditions(int dim, SAMS::domain::edges edge){
+            haloExchange(dim, edge);
+            //Check if we are on a real boundary
+            //Get the MPI axis for this axis
+            if (!isEdge[dim*2 + static_cast<int>(edge)]){
+                //Not on a real boundary, so nothing to do
+                return;
+            }
+            for(auto &bc : boundaryConditionList[dim][static_cast<int>(edge)]){
+                bc->apply(dim, edge);
+            }
+        }
+
+        /**
+         * Call all boundary conditions on a specified dimension
+         * @param dim The dimension to call the boundary conditions on (0 to rank-1
+         */
+        void applyBoundaryConditions(int dim){
+            applyBoundaryConditions(dim, SAMS::domain::edges::lower);
+            applyBoundaryConditions(dim, SAMS::domain::edges::upper);
+        }
+
+        /**
+         * Call all boundary conditions on all dimensions
+         */
+        void applyBoundaryConditions(){
+            for(int dim=0; dim<rank; dim++){
+                applyBoundaryConditions(dim);
+            }
         }
 
         /**

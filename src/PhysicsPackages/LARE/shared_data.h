@@ -26,9 +26,12 @@
 #include "variableDef.h"
 #include "harness.h"
 #include "runner.h"
+#include "io/writerProto.h"
 
 namespace LARE
 {
+
+
 
     namespace pw = portableWrapper;
     // Possible geometry types
@@ -47,6 +50,7 @@ namespace LARE
         BC_REFLECTIVE = 2, // Reflective boundary condition
         BC_OUTFLOW = 3,    // Outflow boundary condition
         BC_INFLOW = 4,     // Inflow boundary condition
+        BC_EXTERNAL = 5   // External boundary condition (do not apply Lare Style BCs)
     };
 
     /**
@@ -77,7 +81,7 @@ namespace LARE
         // Simulation parameters
         T_dataType dt, dtr, dt_multiplier;
         T_dataType time;  // Current LARE3D time
-        size_t step;      // Current LARE3D step
+        int64_t step;      // Current LARE3D step
         int64_t nsteps;   // Maximum number of steps, if < 0 run until t_end
         T_dataType t_end; // End time of the LARE3D
 
@@ -109,10 +113,11 @@ namespace LARE
         T_dataType eta0;           // Limited resisivity (applied J>j_max)
         T_dataType eta_background; // Background resisivity
         T_dataType mf;             // Average mass of an ion in proton masses
-        T_dataType mu0_si;         // Vacuum permeability in SI units
+        T_dataType mu0;             // Vacuum permeability
 
         // IO control
         T_dataType dt_snapshots; // Time between snapshots
+        T_dataType lastOutputTime=0.0; // Time of last output
 
         // Physical arrays
         volumeArray energy_electron; // Electron specific internal energy
@@ -171,7 +176,29 @@ namespace LARE
         volumeArray x, y, z;
         volumeArray xp, yp, zp;
 
-        volumeArray dm;
+        volumeArray bx1;       // X-magnetic field at half timestep
+        volumeArray by1;       // Y-magnetic field at half timestep
+        volumeArray bz1;       // Z-magnetic field at half timestep
+        volumeArray alpha1;    // Alpha1 coefficient for magnetic field update
+        volumeArray alpha2;    // Alpha2 coefficient for magnetic field update
+        volumeArray alpha3;    // Alpha3 coefficient for magnetic field update
+        volumeArray visc_heat; // Viscous heating
+        volumeArray pressure;  // Pressure array
+        volumeArray p_e;       // Electron pressure
+        volumeArray p_i;       // Ion pressure
+        volumeArray rho_v;     // Density at half timestep
+        volumeArray cv_v;      // Control volume at half timestep
+        volumeArray fx;        // X-force
+        volumeArray fy;        // Y-force
+        volumeArray fz;        // Z-force
+        volumeArray fx_visc;   // X-viscous force
+        volumeArray fy_visc;   // Y-viscous force
+        volumeArray fz_visc;   // Z-viscous force
+        volumeArray flux_x;    // X-flux
+        volumeArray flux_y;    // Y-flux
+        volumeArray flux_z;    // Z-flux
+        volumeArray curlb;     // Curl of the magnetic field
+        volumeArray dm;     // Mass flux for remap
 
         bool isxLB = false; // Is this processor on the x-min boundary
         bool isxUB = false; // Is this processor on the x-max boundary
@@ -206,69 +233,59 @@ namespace LARE
         SAMS::variableDef *dm=nullptr;*/
 
     public:
-        LARE3D(SAMS::harness &harnessRef) : harness(harnessRef) {}
-
-        /**
-         * Name of the simulation. Must be unique across all simulations in the executable.
-         */
-        constexpr static std::string name = "LARE3D";
-
-        /**
-         * Lare is a core simulation
-         */
-        constexpr static bool isCoreSimulation = true;
-
-        /**
-         * Lare's dataPack is simulationData
-         */
-        using dataPack = simulationData;
-
-
-        void initialize(/*dataPack &data*/){
-            SAMS::cout << "LARE3D simulation initialized." << std::endl;
-        }
 
         /**
          * Portable array manager for handling memory allocation and deallocation
          */
-        pw::portableArrayManager manager;
+        pw::portableArrayManager& manager;
+
+        void set_dt(simulationData &data);
+
+        /**
+         * Lagrangian predictor step
+         */
+        void predictor_step(simulationData &data);
+        /**
+         * Lagrangian corrector step
+         */
+        void corrector_step(simulationData &data);
 
         /**
          * Boundary conditions for magnetic field
          */
-        void bfield_bcs(simulationData &data);
+        void bfield_bcs();
         /**
          * Boundary conditions for specific internal energy
          */
-        void energy_bcs(simulationData &data);
+        void energy_bcs();
         /**
          * Boundary conditions for density
          */
-        void density_bcs(simulationData &data);
+        void density_bcs();
         /**
          * Boundary conditions for velocity
          */
-        void velocity_bcs(simulationData &data);
+        void velocity_bcs();
         /**
          * Boundary conditions for remap velocity
          * Normally the same as velocity_bcs, but can be different for some LARE3Ds
          */
-        void remap_v_bcs(simulationData &data);
+        void remap_v_bcs();
 
         /**
          * Boundary conditions for remap phase X mass flux
          */
-        void dm_x_bcs(simulationData &data, remapData &remapData);
+        void dm_x_bcs();
 
         /**
          * Boundary conditions for remap phase Y mass flux
          */
-        void dm_y_bcs(simulationData &data, remapData &remapData);
+        void dm_y_bcs();
 
         /**
          * Boundary conditions for remap phase Z mass flux
          */
-        void dm_z_bcs(simulationData &data, remapData &remapData);
+        void dm_z_bcs();
 
         /**
          * Function to perform the X sweep remap
@@ -286,21 +303,140 @@ namespace LARE
         void remap_z(simulationData &data, remapData &remapData);
 
     public:
+
         /**
-         * Register variables with the portable array manager.
+         * Constructor for LARE3D simulation data
          */
-        void registerVars();
+        LARE3D(SAMS::harness &harnessRef) : harness(harnessRef), manager(harnessRef.memoryRegistry.getArrayManager()) {}
+
+        /**
+         * Name of the simulation. Must be unique across all simulations in the executable.
+         */
+        constexpr static std::string_view name = "LARE3D";
+
+        /**
+         * Lare is a core simulation
+         */
+        constexpr static bool coreSimulation = true;
+
+        /**
+         * Lare should be timed
+         */
+        constexpr static bool timeSimulation = true;
+
+        /**
+         * Lare's dataPack is simulationData and remapData
+         */
+        using dataPack = std::tuple<simulationData, remapData>;
+
+
+        /**
+         * Initialize the LARE3D simulation. Called by the runner at the start of the simulation.
+         */
+        void initialize(){
+        }
+
+        /**
+         * Register axes with the harness's axis registry.
+         * Called by the runner before registering variables.
+         * @param harnessRef SAMS harness
+         */
+        void registerAxes(SAMS::harness &harnessRef);
+
+        /**
+         * Register variables with the harness
+         * Called by the runner after registering axes.
+         * @param harnessRef SAMS harness
+         */
+        void registerVariables(SAMS::harness &harnessRef);
+
+
+        /**
+         * Set default values for control parameters
+         */
+        void defaultValues(simulationData &data);
+
+        /**
+         * Set default values for control parameters
+         */
+        void defaultVariables(simulationData &data);
+
+        /**
+         * Get the variables needed for LARE3D
+         * i.e. convert the raw memory from the variable registry into
+         * the volumeArray/lineArray types used by LARE3D
+         * @param harnessRef SAMS harness
+         * @param data LARE3D simulation data
+         */
+        void getVariables(SAMS::harness &harnessRef, simulationData &data){
+            allocate(harnessRef, data);
+            grid(data);
+        }
+
+        /**
+         * Physics timestep functions
+         * This is the predictor step of the LARE3D timestep
+         * @param data LARE3D simulation data
+         */
+        void startOfTimestep(simulationData &data, SAMS::controlFunctions &controlFns){
+            lagrangian_step(data, controlFns);
+        }
+
+        /**
+         * This is the corrector step of the LARE3D timestep
+         * @param data LARE3D simulation data
+         */
+        void halfTimestep(simulationData &data){
+            corrector_step(data);
+        }
+
+        /**
+         * This is called at the end of the LARE3D timestep
+         * @param data LARE3D simulation data
+         */
+        void endOfTimestep(simulationData &data, remapData &remap_data){
+            eulerian_remap(data, remap_data);
+            if (data.rke){
+                energy_correction(data);
+            }
+            eta_calc(data);
+        }
+
+        /**
+         * Set the timestep based on LARE3D data
+         * @note This function is called in response to the control function setTimestep being called
+         * by a package. The runner will NOT call this function directly.
+         * @param timeData SAMS timeState data
+         * @param data LARE3D simulation data
+         */
+        void calculateTimestep(SAMS::timeState &timeData, simulationData &data){
+            set_dt(data);
+            timeData.dt = data.dt<timeData.dt ? data.dt : timeData.dt;
+        }
+
+        /**
+         * Gather the timestep back after all packages have calculated it
+         * @param timeData SAMS timeState data
+         * @param data LARE3D simulation data
+         */
+        void getTimestep(SAMS::timeState &timeData, simulationData &data){
+            data.dt = timeData.dt;
+        }
+
+        template<typename T>
+        void registerOutput(writer<T> &writer, simulationData &data);
+
+        template<typename T>
+        void writeOutput(writer<T> &writer, simulationData &data);
 
         /**
          * Allocate the LARE3D data arrays
+         * @param harness SAMS harness
          * @param data Simulation data struct
-         * @param nx Number of cells in the x-direction
-         * @param ny Number of cells in the y-direction
-         * @param nz Number of cells in the z-direction
          * This function allocates the arrays in the simulationData struct.
          * It uses the portableArrayManager to handle the memory allocation and deallocation.
          */
-        void allocate(simulationData &data);
+        void allocate(SAMS::harness &harness, simulationData &data);
 
         /**
          * Setup the LARE3D data
@@ -311,16 +447,11 @@ namespace LARE
         void controlvariables(simulationData &data);
         /**
          * Setup the grid for the LARE3D
+         * @param harness SAMS harness
          * @param data Simulation data struct
          * This function sets up the grid for the LARE3D, including the cell sizes and coordinates. Automatically creates for the specified geometry.
          */
         void grid(simulationData &data);
-        /**
-         * Setup the initial conditions for the LARE3D
-         * @param data Simulation data struct
-         * This function sets up the initial conditions for the LARE3D, including the initial values of the physical variables.
-         */
-        void initial_conditions(simulationData &data);
 
         /**
          * Call all the boundary condition functions
@@ -328,14 +459,14 @@ namespace LARE
          * This function calls all the boundary condition functions for the LARE3D.
          * It is called at the end of each time step to apply the boundary conditions.
          */
-        void boundary_conditions(simulationData &data);
+        void boundary_conditions();
 
         /**
          * Lagrangian step for the LARE3D
          * @param data Simulation data struct
          * This function performs a Lagrangian step for the LARE3D
          */
-        void lagrangian_step(simulationData &data);
+        void lagrangian_step(simulationData &data, SAMS::controlFunctions &controlFns);
 
         /**
          * Calculate the resistivity eta based on current density
@@ -346,7 +477,7 @@ namespace LARE
         /**
          * Core remap control function
          */
-        void eulerian_remap(simulationData &data);
+        void eulerian_remap(simulationData &data, remapData &remap_data);
 
         /**
          * Function to add back the kinetic energy correction

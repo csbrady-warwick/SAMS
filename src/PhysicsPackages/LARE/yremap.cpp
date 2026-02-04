@@ -21,7 +21,7 @@ namespace LARE
 
         yRemapManager.allocate(remap_data.flux, Range(-1, data.nx + 2), Range(-2, data.ny + 2), Range(-1, data.nz + 2));
 
-        pw::assign(remap_data.dm, 0.0);
+        pw::assign(data.dm, 0.0);
         pw::assign(remap_data.rho1, data.rho);
 
         pw::applyKernel(
@@ -131,13 +131,13 @@ namespace LARE
         // Remap of mass + calculation of mass fluxes (dm) needed for later remaps
         y_mass_flux(data, remap_data);
         // Need dm(0:nx+1,-1:ny+1,0:nz+1) for velocity remap
-        dm_y_bcs(data, remap_data);
+        dm_y_bcs();
 
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
                 T_indexType iym = iy - 1;
                 data.rho(ix, iy, iz) = (remap_data.rho1(ix, iy, iz) * data.cv1(ix, iy, iz) +
-                                        remap_data.dm(ix, iym, iz) - remap_data.dm(ix, iy, iz)) /
+                                        data.dm(ix, iym, iz) - data.dm(ix, iy, iz)) /
                                        remap_data.cv2(ix, iy, iz);
             },
             Range(1, data.nx), Range(1, data.ny), Range(1, data.nz));
@@ -229,22 +229,22 @@ namespace LARE
                 T_indexType iyp = iy + 1;
                 T_indexType izp = iz + 1;
 
-                remap_data.flux(ix, iy, iz) = 0.125 * (remap_data.dm(ix, iy, iz) + remap_data.dm(ixp, iy, iz) +
-                                                       remap_data.dm(ix, iyp, iz) + remap_data.dm(ixp, iyp, iz) +
-                                                       remap_data.dm(ix, iy, izp) + remap_data.dm(ixp, iy, izp) +
-                                                       remap_data.dm(ix, iyp, izp) + remap_data.dm(ixp, iyp, izp));
+                remap_data.flux(ix, iy, iz) = 0.125 * (data.dm(ix, iy, iz) + data.dm(ixp, iy, iz) +
+                                                       data.dm(ix, iyp, iz) + data.dm(ixp, iyp, iz) +
+                                                       data.dm(ix, iy, izp) + data.dm(ixp, iy, izp) +
+                                                       data.dm(ix, iyp, izp) + data.dm(ixp, iyp, izp));
             },
             Range(0, data.nx), Range(-1, data.ny), Range(0, data.nz));
         pw::fence();
 
-        pw::assign(remap_data.dm(Range(0, data.nx), Range(-1, data.ny), Range(0, data.nz)), remap_data.flux(Range(0, data.nx), Range(-1, data.ny), Range(0, data.nz)));
+        pw::assign(data.dm(Range(0, data.nx), Range(-1, data.ny), Range(0, data.nz)), remap_data.flux(Range(0, data.nx), Range(-1, data.ny), Range(0, data.nz)));
         pw::fence();
 
         // Update vertex mass
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
                 T_indexType iym = iy - 1;
-                remap_data.rho_v1(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.cv1(ix, iy, iz) + remap_data.dm(ix, iym, iz) - remap_data.dm(ix, iy, iz)) /
+                remap_data.rho_v1(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.cv1(ix, iy, iz) + data.dm(ix, iym, iz) - data.dm(ix, iy, iz)) /
                                                 remap_data.cv2(ix, iy, iz);
             },
             Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
@@ -283,7 +283,7 @@ namespace LARE
             Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
 
-        this->boundary_conditions(data);
+        this->boundary_conditions();
         remap_data.ypass = 0.0;
 
     } // END LARE3D::remap_y
@@ -309,7 +309,7 @@ namespace LARE
 
         T_dataType fm = data.bx(ix, iym, iz) / dbym;
         T_dataType fi = data.bx(ix, iy, iz) / dby;
-        T_dataType fp = data.bx(ixp, iyp, iz) / dbyp;
+        T_dataType fp = data.bx(ix, iyp, iz) / dbyp;
         T_dataType fp2 = data.bx(ix, iyp2, iz) / dbyp2;
 
         T_dataType dfm = fi - fm;
@@ -397,7 +397,6 @@ namespace LARE
         using Range = pw::Range;
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
-                // FIXME
                 T_indexType izm = iz - 1;
                 T_indexType iym = iy - 1;
                 T_indexType iyp = iy + 1;
@@ -438,7 +437,7 @@ namespace LARE
 
                 T_dataType Di = sign_v * ss * pw::min({std::abs(Da) * dybu, std::abs(dfi), std::abs(dfu)});
 
-                remap_data.dm(ix, iy, iz) = (fu + Di * (1.0 - phi)) * o_v;
+                data.dm(ix, iy, iz) = (fu + Di * (1.0 - phi)) * o_v;
             },
             Range(0, data.nx + 1), Range(0, data.ny), Range(0, data.nz + 1));
         pw::fence();
@@ -497,9 +496,9 @@ namespace LARE
                 T_dataType Di = sign_v * ss * pw::min({std::abs(Da) * dybu, std::abs(dfi), std::abs(dfu)});
 
                 T_dataType rhou = remap_data.rho1(ix, iy, iz) * vad_p + remap_data.rho1(ix, iyp, iz) * vad_m;
-                T_dataType dmu = std::abs(remap_data.dm(ix, iy, iz)) / dybu / rhou;
+                T_dataType dmu = std::abs(data.dm(ix, iy, iz)) / dybu / rhou;
 
-                remap_data.flux(ix, iy, iz) = (fu + Di * (1.0 - dmu)) * remap_data.dm(ix, iy, iz);
+                remap_data.flux(ix, iy, iz) = (fu + Di * (1.0 - dmu)) * data.dm(ix, iy, iz);
             },
             Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
@@ -549,7 +548,7 @@ namespace LARE
         T_dataType Di = sign_v * ss * pw::min({std::abs(Da) * dybu, std::abs(dfi), std::abs(dfu)});
 
         T_dataType rhou = remap_data.rho_v(ix, iy, iz) * vad_p + remap_data.rho_v(ix, iyp, iz) * vad_m;
-        T_dataType dmu = std::abs(remap_data.dm(ix, iy, iz)) / dybu / rhou;
+        T_dataType dmu = std::abs(data.dm(ix, iy, iz)) / dybu / rhou;
 
         remap_data.flux(ix, iy, iz) = fu + Di * (1.0 - dmu); }, Range(0, data.nx), Range(-1, data.ny), Range(0, data.nz));
 
@@ -567,16 +566,16 @@ namespace LARE
                 T_dataType m = remap_data.rho_v1(ix, iy, iz) * remap_data.cv2(ix, iy, iz);
                 T_dataType mp = remap_data.rho_v1(ix, iyp, iz) * remap_data.cv2(ix, iyp, iz);
 
-                T_dataType ai =((data.*mPtr)(ix, iy, iz) - remap_data.flux(ix, iym, iz)) * remap_data.dm(ix, iym, iz) / m - ((data.*mPtr)(ix, iy, iz) - remap_data.flux(ix, iy, iz)) * remap_data.dm(ix, iy, iz) / m;
+                T_dataType ai =((data.*mPtr)(ix, iy, iz) - remap_data.flux(ix, iym, iz)) * data.dm(ix, iym, iz) / m - ((data.*mPtr)(ix, iy, iz) - remap_data.flux(ix, iy, iz)) * data.dm(ix, iy, iz) / m;
 
-                T_dataType aip = ((data.*mPtr)(ix, iyp, iz) - remap_data.flux(ix, iy, iz)) * remap_data.dm(ix, iy, iz) / mp - ((data.*mPtr)(ix, iyp, iz) - remap_data.flux(ix, iyp, iz)) * remap_data.dm(ix, iyp, iz) / mp;
+                T_dataType aip = ((data.*mPtr)(ix, iyp, iz) - remap_data.flux(ix, iy, iz)) * data.dm(ix, iy, iz) / mp - ((data.*mPtr)(ix, iyp, iz) - remap_data.flux(ix, iyp, iz)) * data.dm(ix, iyp, iz) / mp;
 
                 T_dataType dk = ((data.*mPtr)(ix, iyp, iz) - (data.*mPtr)(ix, iy, iz)) *
                     (remap_data.flux(ix, iy, iz) - 0.5 * ((data.*mPtr)(ix, iyp, iz) + (data.*mPtr)(ix, iy, iz))) - 
                     0.5 * ai * ((data.*mPtr)(ix, iy, iz) - remap_data.flux(ix, iy, iz)) + 
                     0.5 * aip * ((data.*mPtr)(ix, iyp, iz) - remap_data.flux(ix, iy, iz));
 
-                dk = dk * remap_data.dm(ix, iy, iz) * 0.5;
+                dk = dk * data.dm(ix, iy, iz) * 0.5;
                 pw::atomic::accelerated::Add(data.delta_ke(ixp,iyp,iz), dk);
                 pw::atomic::accelerated::Add(data.delta_ke(ix ,iyp,iz), dk);
                 pw::atomic::accelerated::Add(data.delta_ke(ixp,iyp,izp), dk);
@@ -584,7 +583,7 @@ namespace LARE
             pw::fence();
         }
 
-        pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) { remap_data.flux(ix, iy, iz) *= remap_data.dm(ix, iy, iz); }, Range(0, data.nx), Range(-1, data.ny), Range(0, data.nz));
+        pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) { remap_data.flux(ix, iy, iz) *= data.dm(ix, iy, iz); }, Range(0, data.nx), Range(-1, data.ny), Range(0, data.nz));
         pw::fence();
     }
 }

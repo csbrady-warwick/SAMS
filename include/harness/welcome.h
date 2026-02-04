@@ -23,7 +23,7 @@ namespace SAMS {
     //Perhaps move to harnessDef.h later?
     inline const int majorVersion = 0;
     inline const int minorVersion = 0;
-    inline const int patchVersion = 2;
+    inline const int patchVersion = 3;
 
     #include <unistd.h>
 

@@ -20,17 +20,14 @@ namespace LARE
 
     namespace pw = portableWrapper;
 
-    void LARE3D::eulerian_remap(simulationData &data)
+    void LARE3D::eulerian_remap(simulationData &data, remapData &remap_data)
     {
         using Range = pw::Range;
         int case_test;
-        remapData remap_data;
         pw::portableArrayManager remapManager;
-        remap_data.dm = data.dm;
 
         // We can allocate everything other than flux here
         remapManager.allocate(remap_data.rho1, Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
-        // remapManager.allocate(remap_data.dm, Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
         remapManager.allocate(remap_data.cv2, Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
         remapManager.allocate(remap_data.cvc1, Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
         remapManager.allocate(remap_data.db1, Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
@@ -97,12 +94,19 @@ namespace LARE
 
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) { data.bz(ix, iy, iz) /= (data.dzab(ix, iy, iz) + data.none_zero); }, Range(-1, data.nx + 2), Range(-1, data.ny + 2), Range(-2, data.nz + 2));
 
-        bfield_bcs(data);
+        bfield_bcs();
 
         // Set the grid positions back to their default value
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
         data.x(ix, iy, iz) = data.xb(ix);
         data.y(ix, iy, iz) = data.yb(iy);
         data.z(ix, iy, iz) = data.zb(iz); }, Range(-2, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
+
+        remapManager.deallocate(remap_data.rho1);
+        remapManager.deallocate(remap_data.cv2);
+        remapManager.deallocate(remap_data.cvc1);
+        remapManager.deallocate(remap_data.db1);
+        remapManager.deallocate(remap_data.rho_v);
+        remapManager.deallocate(remap_data.rho_v1);
     }
 }

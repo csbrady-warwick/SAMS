@@ -279,6 +279,11 @@ namespace{
       return  v1>v2?v1:v2;
     }
 
+    template<typename T1, typename T2, typename... T>
+    FUNCTORMETHODPREFIX constexpr auto max(const T1&v1, const T2&v2, const T&... values){
+      return max(max(v1, v2), values...);
+    }
+
     /**
      * Portable version of std::max that takes an initializer list
      * @brief Returns the maximum of a list of values.
@@ -305,6 +310,11 @@ namespace{
     template<typename T1, typename T2>
     FUNCTORMETHODPREFIX constexpr auto min(const T1&v1, const T2&v2){
       return  v1<v2?v1:v2;
+    }
+
+    template<typename T1, typename T2, typename... T>
+    FUNCTORMETHODPREFIX constexpr auto min(const T1&v1, const T2&v2, const T&... values){
+      return min(min(v1, v2), values...);
     }
 
     /**
@@ -403,7 +413,7 @@ namespace{
 
     //For a tuple all of the same type, one can get the N_th element at runtime
     template<int level=0, typename... T>
-      portableTuple::tuple_element_t<0, portableTuple::tuple<T...>>& getTupleElement(portableTuple::tuple<T...>& t, UNSIGNED_INDEX_TYPE n){
+      FUNCTORMETHODPREFIX portableTuple::tuple_element_t<0, portableTuple::tuple<T...>>& getTupleElement(portableTuple::tuple<T...>& t, UNSIGNED_INDEX_TYPE n){
         if constexpr(level < sizeof...(T)){
           if(n==level){
             return portableTuple::get<level>(t);
@@ -411,12 +421,17 @@ namespace{
             return getTupleElement<level+1, T...>(t, n);
           }
         } else {
+          //If in device code, just return first element to avoid compiler error
+          #if defined (__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
+          return portableTuple::get<0>(t);
+          #else
           throw std::runtime_error("Error: tuple index out of range in getTupleElement\n");
+          #endif
         }
       }
 
       template<int level=0, typename... T>
-      const portableTuple::tuple_element_t<0, portableTuple::tuple<T...>>& getTupleElement(const portableTuple::tuple<T...>& t, UNSIGNED_INDEX_TYPE n){
+      FUNCTORMETHODPREFIX const portableTuple::tuple_element_t<0, portableTuple::tuple<T...>>& getTupleElement(const portableTuple::tuple<T...>& t, UNSIGNED_INDEX_TYPE n){
         if constexpr(level < sizeof...(T)){
           if(n==level){
             return portableTuple::get<level>(t);
@@ -424,7 +439,11 @@ namespace{
             return getTupleElement<level+1, T...>(t, n);
           }
         } else {
+          #if defined (__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
+          return portableTuple::get<0>(t);
+          #else
           throw std::runtime_error("Error: tuple index out of range in getTupleElement\n");
+          #endif
         }
       }
 

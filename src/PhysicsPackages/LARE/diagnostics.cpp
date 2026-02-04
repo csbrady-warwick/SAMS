@@ -46,13 +46,9 @@ namespace LARE
         manager.deallocate(fullHost);
     }
 
-    template <typename T_writer>
-    void writeDiagnosticsCore(std::string Name, simulationData &data, writer<T_writer> &writer)
+    template<typename T_writer>
+    void LARE3D::registerOutput(writer<T_writer> &writer, simulationData &data)
     {
-        pw::portableArrayManager manager;
-        hostVolumeArray host;
-
-        writer.openFile(Name.c_str());
         writer.template registerRectilinearMesh<T_dataType>("MeshCC", data.nx, data.ny, data.nz);
 
         writer.template registerData<T_dataType>("rho", "MeshCC");
@@ -64,8 +60,15 @@ namespace LARE
         writer.template registerData<T_dataType>("bx", "MeshCC");
         writer.template registerData<T_dataType>("by", "MeshCC");
         writer.template registerData<T_dataType>("bz", "MeshCC");
+    }
 
-        writer.writeRectilinearMesh("MeshCC", &data.xc(1), &data.yc(1), &data.zc(1));
+    template <typename T_writer>
+    void LARE3D::writeOutput(writer<T_writer> &writer, simulationData &data)
+    {
+        pw::portableArrayManager manager;
+        hostVolumeArray host;
+
+        writer.writeRectilinearMesh("MeshCC", &data.xc_host(1), &data.yc_host(1), &data.zc_host(1));
 
         getHostVersion(data, manager, data.rho, host);
         writer.writeData("rho", host.data());
@@ -93,9 +96,19 @@ namespace LARE
 
         getHostVersion(data, manager, data.bz, host);
         writer.writeData("bz", host.data());
-
-        writer.closeFile();
     }
+
+//Need a better solution than this against future additions of writers
+//Perhaps another X macro?
+#if defined(USE_HDF5)
+//Instantiate the templates for HDF5 writer
+    template void LARE3D::registerOutput<HDF5File>(writer<HDF5File> &writer, simulationData &data);
+    template void LARE3D::writeOutput<HDF5File>(writer<HDF5File> &writer, simulationData &data);
+#else
+//Instantiate the templates for simple writer
+    template void LARE3D::registerOutput<simpleFile>(writer<simpleFile> &writer, simulationData &data);
+    template void LARE3D::writeOutput<simpleFile>(writer<simpleFile> &writer, simulationData &data);
+#endif
 
     void LARE3D::output(simulationData &data)
     {
@@ -105,7 +118,10 @@ namespace LARE
         simpleFile writer;
 #endif
         std::string Name = "diagnostics_step_" + std::to_string(data.step);
-        writeDiagnosticsCore(Name, data, writer);
+        writer.openFile(Name.c_str()); 
+        registerOutput(writer, data);
+        writeOutput(writer, data);
+        writer.closeFile();
     }
 
     void LARE3D::energy_correction(simulationData &data)

@@ -36,7 +36,7 @@ namespace SAMS
         }
 
 
-        inline void initialize(int *argc, char ***argv)
+        inline void initialize([[maybe_unused]] int *argc, [[maybe_unused]] char ***argv)
         {
             #ifdef USE_MPI
             int rank = 0;
@@ -91,7 +91,7 @@ namespace SAMS
             #endif
         }
 
-        inline void initialize(int &argc, char **&argv)
+        inline void initialize([[maybe_unused]] int &argc, [[maybe_unused]] char **&argv)
         {
             initialize(&argc, &argv);
 
@@ -302,7 +302,7 @@ namespace SAMS
          * @param incRef Whether to increment the reference count of the found MPI_Datatype (default false)
          * @return The found MPI_Datatype, or MPI_DATATYPE_NULL if not found
          */
-        MPI_Datatype getCacheEntry(const std::string &Name, bool incRef=false)
+        MPI_Datatype getCacheEntry([[maybe_unused]] const std::string &Name, [[maybe_unused]] bool incRef=false)
         {
             #ifdef USE_MPI
             auto it = mpiSubarrayTypeCache.find(Name);
@@ -323,7 +323,7 @@ namespace SAMS
          * @param mpiType The MPI_Datatype to get the name of
          * @return The name of the MPI_Datatype, or empty string if not found
          */
-        std::string buildMPIGenericName(MPI_Datatype mpiType)
+        std::string buildMPIGenericName([[maybe_unused]] MPI_Datatype mpiType)
         {
             #ifdef USE_MPI
             int nints, nadds, ntypes, combiner;
@@ -387,7 +387,7 @@ namespace SAMS
          * @param mpiType The MPI_Datatype to name
          * @param name The name to set
          */
-        void setMPITypeName(MPI_Datatype mpiType, const std::string &name)
+        void setMPITypeName([[maybe_unused]] MPI_Datatype mpiType, [[maybe_unused]] const std::string &name)
         {
             #ifdef USE_MPI
             //Check if the string is later than MPI_MAX_OBJECT_NAME
@@ -409,7 +409,7 @@ namespace SAMS
          * @param UB Array of size rank specifying the upper bounds of the slice
          * @param baseType The base MPI_Datatype of the variable
          */
-        MPI_Datatype createArraySliceType(int rank, SIGNED_INDEX_TYPE *domainLB, SIGNED_INDEX_TYPE *domainUB, SIGNED_INDEX_TYPE *LB, SIGNED_INDEX_TYPE *UB, MPI_Datatype baseType){
+        MPI_Datatype createArraySliceType([[maybe_unused]] int rank, [[maybe_unused]] SIGNED_INDEX_TYPE *domainLB, [[maybe_unused]] SIGNED_INDEX_TYPE *domainUB, [[maybe_unused]] SIGNED_INDEX_TYPE *LB, [[maybe_unused]] SIGNED_INDEX_TYPE *UB, [[maybe_unused]] MPI_Datatype baseType){
             #ifdef USE_MPI
             int starts[MAX_RANK], sizes[MAX_RANK], subsizes[MAX_RANK];
             for (int i = 0; i < rank; i++)
@@ -445,7 +445,7 @@ namespace SAMS
          * @param mpiType The MPI_Datatype to delete
          * @param forceDelete If true, delete the type even if the reference count is not
          */
-        bool deleteMPIType(MPI_Datatype mpiType, bool forceDelete = false)
+        bool deleteMPIType([[maybe_unused]] MPI_Datatype mpiType, [[maybe_unused]] bool forceDelete = false)
         {
             #ifdef USE_MPI
             try{
@@ -474,7 +474,7 @@ namespace SAMS
         }
 
 
-        void registerMPIType(MPI_Datatype mpiType, const std::string &name)
+        void registerMPIType([[maybe_unused]] MPI_Datatype mpiType, [[maybe_unused]] const std::string &name)
         {
             #ifdef USE_MPI
             mpiSubarrayTypeCache.emplace(name, MPITypeHolder(mpiType, name));
@@ -483,7 +483,7 @@ namespace SAMS
             #endif
         }
 
-        MPI_Datatype checkoutCore(const std::string &typeName)
+        MPI_Datatype checkoutCore([[maybe_unused]] const std::string &typeName)
         {
             #ifdef USE_MPI
             auto it = mpiSubarrayTypeCache.find(typeName);
@@ -526,7 +526,7 @@ namespace SAMS
         void buildTypeFromMemberPointers(T_classIn *base, std::array<int, N> &blocklengths, std::array<MPI_Aint, N> &displacements, std::array<MPI_Datatype, N> &types)
         {
             //First set the type from the type registry
-            using MemberType = memberPointerTraits<decltype(c)>::memberType;
+            using MemberType = typename memberPointerTraits<decltype(c)>::memberType;
             //Member must be trivially copyable to be used in MPI communication
             static_assert(std::is_trivially_copyable<MemberType>::value, "Error: Member type must be trivially copyable to create MPI datatype");
             types[level] = gettypeRegistry().getMPIType<MemberType>();
@@ -545,7 +545,7 @@ namespace SAMS
         }
 
 
-        MPI_Datatype cacheType(MPI_Datatype newType){
+        MPI_Datatype cacheType([[maybe_unused]] MPI_Datatype newType){
             #ifdef USE_MPI
             std::string Name = buildMPIGenericName(newType);
             //If type already in cache, return existing type
@@ -571,11 +571,11 @@ namespace SAMS
          * @param isPeriodic Array of size Dims specifying whether each dimension is periodic (1
          */
         template<std::size_t N = Dims>
-        void setDecomposition(const std::array<int, Dims> &decomposition, const std::array<bool, N> &isPeriodic)
+        void setDecomposition([[maybe_unused]] const std::array<int, Dims> &decomposition, [[maybe_unused]] const std::array<bool, N> &isPeriodic)
         {
             static_assert(N <= MAX_RANK, "Error: isPeriodic array size exceeds MAX_RANK");
             //Always want periodic domain info
-            for (int i = 0; i < N; i++)
+            for (std::size_t i = 0; i < N; i++)
             {
                 periods[i] = isPeriodic[i]? 1 : 0;
             }
@@ -769,14 +769,14 @@ namespace SAMS
         void decomposeAxis(const std::string &axisName)
         {
             int axis = ar.getMPIAxis(axisName);
-            size_t globalElements = ar.getLocalDomainElements(axisName, staggerType::CENTRED);
+            size_t globalElements = ar.getDomainElements(axisName, staggerType::CENTRED);
             size_t localElements = 0;
             if (axis >= 0)
             {
                 // Decompose the axis, distributing any remainder to the first few ranks
                 localElements = globalElements / dims[axis];
                 size_t remainder = globalElements % dims[axis];
-                if (coords[axis] < remainder)
+                if (static_cast<std::size_t>(coords[axis]) < remainder)
                 {
                     localElements++;
                 }
@@ -820,7 +820,7 @@ namespace SAMS
          * @param baseType The base MPI_Datatype
          * @param layout The layout of the array (default MPI_ORDER_C)
          */
-        MPI_Datatype createMPISubarrayType(int rank, const int* sizes, const int* subsizes, const int* starts, MPI_Datatype baseType, int layout=MPI_ORDER_C)
+        MPI_Datatype createMPISubarrayType([[maybe_unused]] int rank, [[maybe_unused]] const int* sizes, [[maybe_unused]] const int* subsizes, [[maybe_unused]] const int* starts, [[maybe_unused]] MPI_Datatype baseType, [[maybe_unused]] int layout=MPI_ORDER_C)
         {
             #ifdef USE_MPI
             MPI_Datatype newType;
@@ -847,7 +847,7 @@ namespace SAMS
          * @param layout The layout of the array (default MPI_ORDER_C)
          */
         template<int N>
-        MPI_Datatype createMPISubarrayType(const std::array<int,N> &sizes, const std::array<int,N> &subsizes, const std::array<int,N> &starts, MPI_Datatype baseType, int layout=MPI_ORDER_C)
+        MPI_Datatype createMPISubarrayType([[maybe_unused]] const std::array<int,N> &sizes, [[maybe_unused]] const std::array<int,N> &subsizes, [[maybe_unused]] const std::array<int,N> &starts, [[maybe_unused]] MPI_Datatype baseType, [[maybe_unused]] int layout=MPI_ORDER_C)
         {
             #ifdef USE_MPI
             return createMPISubarrayType(N, sizes.data(), subsizes.data(), starts.data(), baseType, layout);
@@ -862,7 +862,7 @@ namespace SAMS
          * @param ranges portableWrapper::range objects defining the lower and upper bounds in each dimension
          */
         template<typename T, int rank, portableWrapper::arrayTags tag, typename... T_Ranges>
-        MPI_Datatype createArraySliceType(portableWrapper::portableArray<T, rank, tag> &arrayVar, T_Ranges... ranges)
+        MPI_Datatype createArraySliceType([[maybe_unused]] portableWrapper::portableArray<T, rank, tag> &arrayVar, [[maybe_unused]] T_Ranges... ranges)
         {
             #ifdef USE_MPI
             static_assert(sizeof...(ranges) == rank, "Error: Number of ranges must match array rank");
@@ -890,7 +890,7 @@ namespace SAMS
          * @param array_of_types Array of MPI_Datatypes
          */
         
-        MPI_Datatype createMPIStructType(int elements, const int *array_of_blocklengths, const MPI_Aint *array_of_displacements, const MPI_Datatype *array_of_types)
+        MPI_Datatype createMPIStructType( [[maybe_unused]] int elements, [[maybe_unused]] const int *array_of_blocklengths, [[maybe_unused]] const MPI_Aint *array_of_displacements, [[maybe_unused]] const MPI_Datatype *array_of_types)
         {
             #ifdef USE_MPI
             MPI_Datatype newType;
@@ -910,7 +910,7 @@ namespace SAMS
          * Create an MPI_Type_create_struct for a specified set of blocklengths, displacements and types
          */
         template<int N>
-        MPI_Datatype createMPIStructType(const std::array<int,N> &array_of_blocklengths, const std::array<MPI_Aint,N> &array_of_displacements, const std::array<MPI_Datatype,N> &array_of_types)
+        MPI_Datatype createMPIStructType([[maybe_unused]] const std::array<int,N> &array_of_blocklengths, [[maybe_unused]] const std::array<MPI_Aint,N> &array_of_displacements, [[maybe_unused]] const std::array<MPI_Datatype,N> &array_of_types)
         {
             #ifdef USE_MPI
             return createMPIStructType(N, array_of_blocklengths.data(), array_of_displacements.data(), array_of_types.data());
@@ -978,7 +978,7 @@ namespace SAMS
          * @param count The number of elements in the contiguous type
          * @param baseType The base MPI_Datatype
          */
-        MPI_Datatype createMPIContiguousType(int count, MPI_Datatype baseType)
+        MPI_Datatype createMPIContiguousType([[maybe_unused]] int count, [[maybe_unused]] MPI_Datatype baseType)
         {
             #ifdef USE_MPI
             MPI_Datatype newType;            
@@ -1001,7 +1001,7 @@ namespace SAMS
          * @param stride The stride between blocks
          * @param baseType The base MPI_Datatype
          */
-        MPI_Datatype createMPIVectorType(int count, int blocklength, int stride, MPI_Datatype baseType)
+        MPI_Datatype createMPIVectorType([[maybe_unused]] int count, [[maybe_unused]] int blocklength, [[maybe_unused]] int stride, [[maybe_unused]] MPI_Datatype baseType)
         {
             #ifdef USE_MPI
             MPI_Datatype newType;
@@ -1024,7 +1024,7 @@ namespace SAMS
          * @param stride The stride between blocks
          * @param baseType The base MPI_Datatype
          */
-        MPI_Datatype createMPIHVectorType(int count, int blocklength, MPI_Aint stride, MPI_Datatype baseType)
+        MPI_Datatype createMPIHVectorType([[maybe_unused]] int count, [[maybe_unused]] int blocklength, [[maybe_unused]] MPI_Aint stride, [[maybe_unused]] MPI_Datatype baseType)
         {
             #ifdef USE_MPI
             MPI_Datatype newType;
@@ -1047,7 +1047,7 @@ namespace SAMS
          * @param mpiType The MPI_Datatype to add
          * @result The name assigned to the MPI_Datatype
          */
-        std::string cacheMPIType(MPI_Datatype &mpiType)
+        std::string cacheMPIType([[maybe_unused]] MPI_Datatype &mpiType)
         {
             #ifdef USE_MPI
             mpiType = cacheType(mpiType);
@@ -1063,7 +1063,7 @@ namespace SAMS
          * @param mpiType The MPI_Datatype to get the name for
          * @return The name of the MPI_Datatype
          */
-        std::string getMPITypeName(MPI_Datatype mpiType)
+        std::string getMPITypeName([[maybe_unused]] MPI_Datatype mpiType)
         {
             #ifdef USE_MPI
             return buildMPIGenericName(mpiType);
@@ -1078,7 +1078,7 @@ namespace SAMS
          * @param typeName The name of the type to checkout
          * @return The MPI_Datatype
          */
-        MPI_Datatype checkoutMPIType(const std::string &typeName)
+        MPI_Datatype checkoutMPIType([[maybe_unused]] const std::string &typeName)
         {
             #ifdef USE_MPI
             return checkoutCore(typeName);
@@ -1093,7 +1093,7 @@ namespace SAMS
          * @param mpiType The MPI_Datatype to checkin
          * @param forceDelete If true, delete the type even if the reference count is not zero
          */
-        void checkinMPIType(MPI_Datatype &mpiType, bool forceDelete = false)
+        void checkinMPIType([[maybe_unused]] MPI_Datatype &mpiType, [[maybe_unused]] bool forceDelete = false)
         {
             #ifdef USE_MPI
             bool deleted = deleteMPIType(mpiType, forceDelete);
@@ -1109,7 +1109,7 @@ namespace SAMS
          * @param mpiRecv Array to store the receive MPI_Datatypes (size 2*rank)
          * @param baseType The base MPI_Datatype of the variable
          */
-        void assignVariableMPITypes(int rank, dimension* dims, MPI_Datatype* mpiSend, MPI_Datatype* mpiRecv, MPI_Datatype baseType)
+        void assignVariableMPITypes([[maybe_unused]] int rank, [[maybe_unused]] dimension* dims, [[maybe_unused]] MPI_Datatype* mpiSend, [[maybe_unused]] MPI_Datatype* mpiRecv, [[maybe_unused]] MPI_Datatype baseType)
         {
             #ifdef USE_MPI
             SIGNED_INDEX_TYPE LB[MAX_RANK], UB[MAX_RANK];
@@ -1243,7 +1243,7 @@ namespace SAMS
             }
         }
 
-        void haloExchange(void* data, int rank, MPI_Datatype* mpiSend, MPI_Datatype* mpiRecv, int axis, SAMS::domain::edges edgeType)
+        void haloExchange([[maybe_unused]] void* data, [[maybe_unused]] int rank, [[maybe_unused]] MPI_Datatype* mpiSend, [[maybe_unused]] MPI_Datatype* mpiRecv, [[maybe_unused]] int axis, [[maybe_unused]] SAMS::domain::edges edgeType)
         {
 #ifdef USE_MPI
             int sendIndex = (edgeType == SAMS::domain::edges::lower ? axis*2 : axis*2+1);
@@ -1256,7 +1256,7 @@ namespace SAMS
 #endif
         }
 
-        void haloExchange(void* data, int rank, MPI_Datatype* mpiSend, MPI_Datatype* mpiRecv, int axis)
+        void haloExchange([[maybe_unused]] void* data, [[maybe_unused]] int rank, [[maybe_unused]] MPI_Datatype* mpiSend, [[maybe_unused]] MPI_Datatype* mpiRecv, [[maybe_unused]] int axis)
         {
 #ifdef USE_MPI
             haloExchange(data, rank, mpiSend, mpiRecv, axis, SAMS::domain::edges::lower);
@@ -1267,7 +1267,7 @@ namespace SAMS
         /**
          * 
          */
-        void haloExchange(void* data, int rank, MPI_Datatype* mpiSend, MPI_Datatype* mpiRecv)
+        void haloExchange([[maybe_unused]] void* data, [[maybe_unused]] int rank, [[maybe_unused]] MPI_Datatype* mpiSend, [[maybe_unused]] MPI_Datatype* mpiRecv)
         {
 #ifdef USE_MPI
             for (int axis = 0; axis < rank; axis++)
@@ -1278,7 +1278,7 @@ namespace SAMS
 #endif
         }
 
-        void abort(const std::string &message, bool localError = false)
+        void abort(const std::string &message, [[maybe_unused]] bool localError = false)
         {
 #ifdef USE_MPI
             if (localError) {
@@ -1290,6 +1290,14 @@ namespace SAMS
 #else
             throw std::runtime_error("Abort called: " + message);
 #endif
+        }
+
+        void finalize()
+        {
+            #ifdef USE_MPI
+            if (comm != rootComm)
+                checkMPIError(MPI_Comm_free(&comm));
+            #endif
         }
 
         /**
@@ -1316,10 +1324,7 @@ namespace SAMS
         *Don't have to free types because they are freed in the caches
         */
         ~MPIManager() {
-            #ifdef USE_MPI
-            if (comm != rootComm)
-                checkMPIError(MPI_Comm_free(&comm));
-            #endif
+            finalize();
         }
     };
 

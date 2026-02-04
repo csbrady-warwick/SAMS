@@ -32,7 +32,6 @@
 namespace SAMS{
 
     class memoryRegistry{
-        friend memoryRegistry& getmemoryRegistry();
         //Array manager from portableWrapper to handle allocations
         portableWrapper::portableArrayManager arrayManager; 
         public:
@@ -75,6 +74,13 @@ namespace SAMS{
         void deallocate(void* ptr){
             // Use arrayManager to deallocate
             arrayManager.deallocate(ptr);
+        }
+
+        /**
+         * Finalize the memory registry, deallocating all managed memory
+         */
+        void finalize(){
+            arrayManager.finalize();
         }
 
     };

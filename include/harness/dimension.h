@@ -52,6 +52,11 @@ namespace SAMS{
         bool periodic = false;
 
         /**
+         * Has the domain been set for this dimension?
+         */
+        bool domainSet = false;
+
+        /**
          * What geometry does this dimension represent?
          */
         //geometryType geometry = geometryType::CARTESIAN;
@@ -61,6 +66,9 @@ namespace SAMS{
          * Empty string if no axis is associated and this is a custom dimension
          */
         std::string axisName = "";
+
+
+        MPIAxis mpiAxis;
 
         dimension() = default;
 
@@ -98,6 +106,11 @@ namespace SAMS{
         dimension(COUNT_TYPE lowerGhosts, COUNT_TYPE upperGhosts, COUNT_TYPE zones, staggerType stagger)
             : lowerGhosts(lowerGhosts), upperGhosts(upperGhosts), zones(zones), zonesLocal(zones), stagger(stagger) {}
 
+
+        void attachMPIAxis(MPIAxis axis){
+            mpiAxis = axis;
+        }
+
         /**
          * Get the total number of cells different between the current staggering and another staggering
          * @param s The other staggering type
@@ -132,15 +145,34 @@ namespace SAMS{
             return zones;
         }
 
+        void unsetDomainElements()
+        {
+            domainSet = false;
+            zones = 0;
+            zonesLocal = 0;
+            globalLowerIndex = 0;
+            globalUpperIndex = 0;
+        }
+
+        bool getDomainIsSet() const
+        {
+            return domainSet;
+        }
+
         /**
          * Set the number of elements in this dimension specifying the number of elements for a given staggering type
          */
         void setDomainElements(COUNT_TYPE elements, staggerType s)
         {
+            if (domainSet)
+            {
+                throw std::runtime_error("Error: dimension domain already set\n");
+            }
             zones = elements - getCellDelta(s);
             zonesLocal = elements - getCellDelta(s);
             globalLowerIndex = getLB(s);
             globalUpperIndex = getUB(s);
+            domainSet = true;
         }
 
         /**
@@ -262,7 +294,7 @@ namespace SAMS{
          * Get the global lower bound for the dimension, assuming zero-based indexing
          * @note Always returns zero, but just used to avoid magic numbers in code
          */
-        SIGNED_INDEX_TYPE getLBZeroBase(staggerType s) const
+        SIGNED_INDEX_TYPE getLBZeroBase([[maybe_unused]] staggerType s) const
         {
             //Default index starts at 0, no adjustment needed
             return 0;
@@ -411,7 +443,7 @@ namespace SAMS{
         /**
          * Get the global lower bound for the actual DOMAIN i.e. the first index of the real data for a given staggering type, assuming zero-based indexing
          */
-        SIGNED_INDEX_TYPE getDomainLBZeroBase(staggerType s) const
+        SIGNED_INDEX_TYPE getDomainLBZeroBase([[maybe_unused]] staggerType s) const
         {
             //Now we have to add the number of ghost cells to get to zero-based indexing
             return static_cast<SIGNED_INDEX_TYPE>(lowerGhosts);
@@ -528,7 +560,7 @@ namespace SAMS{
         * @note Always returns zero, but just used to avoid magic numbers in code
         @param s The staggering type
         */
-        SIGNED_INDEX_TYPE getLocalLBZeroBase(staggerType s) const
+        SIGNED_INDEX_TYPE getLocalLBZeroBase([[maybe_unused]] staggerType s) const
         {
             //Default index starts at 0, no adjustment needed
             return 0;
@@ -650,7 +682,7 @@ namespace SAMS{
         /**
         * Get the lower bound for the actual DOMAIN i.e. the first index of the real data for a given staggering type, assuming zero-based indexing
          */
-        SIGNED_INDEX_TYPE getLocalDomainLBZeroBase(staggerType s) const
+        SIGNED_INDEX_TYPE getLocalDomainLBZeroBase([[maybe_unused]] staggerType s) const
         {
             //Now we have to add the number of ghost cells to get to zero-based indexing
             return static_cast<SIGNED_INDEX_TYPE>(lowerGhosts);
@@ -850,7 +882,7 @@ namespace SAMS{
          * @param s The staggering type
         * @return A portableWrapper::Range representing the global range including ghost cells
          */
-        portableWrapper::Range getGlobalRangeZeroBase(staggerType s) const
+        portableWrapper::Range getGlobalRangeZeroBase([[maybe_unused]] staggerType s) const
         {
             return portableWrapper::Range(getGlobalLB(stagger), getGlobalUB(stagger));
         }
@@ -1184,6 +1216,7 @@ namespace SAMS{
             zonesLocal = src.getLocalDomainElements(stagger);
             globalLowerIndex = src.getGlobalDomainLB(stagger);
             globalUpperIndex = src.getGlobalDomainUB(stagger);
+            mpiAxis = src.mpiAxis;
         }
 
     }; // struct dimension

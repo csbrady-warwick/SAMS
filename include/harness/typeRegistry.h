@@ -120,7 +120,7 @@ namespace SAMS {
         /**
          * Get the MPI_Datatype corresponding to a typeID
          */
-        MPI_Datatype getMPIType(typeHandle t) {
+        MPI_Datatype getMPIType([[maybe_unused]] typeHandle t) {
             #ifdef USE_MPI
             return mpiTypes[static_cast<int>(t)];
             #else
@@ -136,10 +136,10 @@ namespace SAMS {
          */
         template<typename T>
         MPI_Datatype getMPIType() {
+            #ifdef USE_MPI
             auto it = getTypeIterator<T>();
             if (it == typeMap.end()) throw std::runtime_error("Type not registered with typeRegistry MPIT.");
             typeID t = it->second;
-            #ifdef USE_MPI
             return mpiTypes[static_cast<int>(t)];
             #else
             return MPI_DATATYPE_NULL;
@@ -149,7 +149,7 @@ namespace SAMS {
         /**
          * Get the name of a typeID
          */
-        std::string getTypeName(typeHandle t) {
+        std::string getTypeName([[maybe_unused]] typeHandle t) {
             return typeNames[static_cast<int>(t)];
         }
 
@@ -222,7 +222,7 @@ namespace SAMS {
          * @return The corresponding harness typeID
          */
         template<typename T>
-        typeHandle registerType(const std::string& typeName, MPI_Datatype mpiType) {
+        typeHandle registerType(const std::string& typeName, [[maybe_unused]] MPI_Datatype mpiType) {
             auto it = typeMap.find(std::type_index(typeid(T)));
             if (it != typeMap.end()) throw std::runtime_error("Type already registered with typeRegistry.");
             int newID = static_cast<int>(typeSizes.size());

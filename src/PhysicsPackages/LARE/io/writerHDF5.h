@@ -65,11 +65,11 @@ class HDF5File : public writer<HDF5File> {
   */
 	void startRegisterImpl(){}
 	void startWriteImpl(){}
-	void registerRectilinearMeshImpl(const char* name, const writerRLMeshInfo &info, const size_t nx, const size_t ny, const size_t nz){
+	void registerRectilinearMeshImpl([[maybe_unused]] const char* name, [[maybe_unused]] const writerRLMeshInfo &info, [[maybe_unused]] const size_t nx, [[maybe_unused]] const size_t ny, [[maybe_unused]] const size_t nz){
 	}
-	void registerRectilinearMeshImpl(const char* name, const writerRLMeshInfo &info, const size_t nx, const size_t ny){
+	void registerRectilinearMeshImpl([[maybe_unused]] const char* name, [[maybe_unused]] const writerRLMeshInfo &info, [[maybe_unused]] const size_t nx, [[maybe_unused]] const size_t ny){
 	}
-	void registerRectilinearMeshImpl(const char* name, const writerRLMeshInfo &info, const size_t nx){
+	void registerRectilinearMeshImpl([[maybe_unused]] const char* name, [[maybe_unused]] const writerRLMeshInfo &info, [[maybe_unused]] const size_t nx){
 	}
 
   /**
@@ -188,7 +188,7 @@ class HDF5File : public writer<HDF5File> {
       }
 		}
 
-	void registerDataImpl(const char* name, const char* meshName, writerDataInfo &dataInfo, writerMeshInfo &meshInfo){
+	void registerDataImpl([[maybe_unused]] const char* name, [[maybe_unused]] const char* meshName, [[maybe_unused]] writerDataInfo &dataInfo, [[maybe_unused]] writerMeshInfo &meshInfo){
 	}
 
 	//Write data against a mest

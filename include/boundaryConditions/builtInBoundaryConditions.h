@@ -26,8 +26,8 @@ namespace SAMS
         std::array<portableWrapper::std_N_ary_tuple_type_t<portableWrapper::Range, rank>, 2*rank> boundaryRanges;
     public:
         singleVariableBC(const SAMS::variableDef &varDef)
-            : varDef(varDef),
-            variable(varDef.template getPPArray<T, rank, tag>())
+            :
+            variable(varDef.template getPPArray<T, rank, tag>()), varDef(varDef)
         {
             for (int iface = 0; iface < rank; iface++){
                 for (int i=0; i<rank; i++)
@@ -166,7 +166,7 @@ namespace SAMS
                 firstGhostPoint = dimInfo.getLocalNonDomainLB(SAMS::domain::edges::upper);
             }
             mirrorHelper<T, rank, tag> helper(var, dimension, lastDomainPoint, firstGhostPoint);
-            std::apply([&var, &helper](auto... params){
+            std::apply([&helper](auto... params){
                 portableWrapper::applyKernel(helper, params...);
             }, ranges);
         }

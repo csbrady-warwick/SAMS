@@ -27,7 +27,7 @@ namespace SAMS{
         friend variableRegistry& getvariableRegistry();
         private:
         template<int i>
-        friend struct MPIManager;
+        friend class MPIManager;
         std::unordered_map<std::string, variableDef> variables;
         std::vector<std::function<void(std::string)>> allocateCallbacks;
         std::unordered_map<std::string, variableDef>& getVariableMap() {
@@ -205,6 +205,165 @@ namespace SAMS{
             return portableWrapper::kokkos::toView(ppArray);
         }*/
         #endif
+
+       /**
+         * Add a boundary condition to a specified edge of a specified dimension of a specified variable
+         * @param name The name of the variable
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param edge The edge to add the boundary condition to (SAMS::domain::edges)
+         * @param bc The boundary condition to add (shared_ptr to boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(const std::string name, int dim, SAMS::domain::edges edge, std::shared_ptr<T> bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            return getVariable(name).addBoundaryCondition(dim, edge, bc);
+        }
+
+        /**
+         * Add a boundary condition to both edges of a specified dimension
+         * @param name The name of the variable
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param bc The boundary condition to add (shared_ptr to boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to both edges
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(const std::string name, int dim, std::shared_ptr<T> bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            return getVariable(name).addBoundaryCondition(dim, bc);
+        }
+
+        /**
+         * Add a boundary condition to both edges of all dimensions
+         * @param name The name of the variable
+         * @param bc The boundary condition to add (shared_ptr to boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to all edges of all dimensions
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(const std::string name, std::shared_ptr<T> bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            return getVariable(name).addBoundaryCondition(bc);
+        }
+
+
+        /** 
+         * Add a boundary condition specified as an object (not a shared_ptr) to a specific edge of a specified dimension
+         * @param name The name of the variable
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param edge The edge to add the boundary condition to (SAMS::domain::edges)
+         * @param bc The boundary condition to add (boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(const std::string name, const int dim, SAMS::domain::edges edge, const T& bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            return addBoundaryCondition(name, dim, edge, std::make_shared<T>(bc));
+        }
+
+        /**
+         * Add a boundary condition specified as an object (not a shared_ptr) to both edges of a specified dimension
+         * @param name The name of the variable
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param bc The boundary condition to add (boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to both edges
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(const std::string name, const int dim, const T& bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            return addBoundaryCondition(name, dim, std::make_shared<T>(bc));
+        }
+
+        /**
+         * Add a boundary condition specified as an object (not a shared_ptr) to both edges of all dimensions
+         * @param bc The boundary condition to add (boundaryConditions or derived class)
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to all edges of all dimensions
+         */
+        template<typename T>
+        std::shared_ptr<boundaryConditions> addBoundaryCondition(const std::string name, const T& bc){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef addBoundaryCondition bc must be derived from boundaryConditions");
+            return addBoundaryCondition(name, std::make_shared<T>(bc));
+        }
+
+        /**
+         * Emplace a specified boundary condition to a specific edge of a specified dimension
+         * @param name The name of the variable
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param edge The edge to add the boundary condition to (SAMS::domain::edges)
+         * @param args The arguments to construct the boundary condition
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         */
+        template<typename T, typename... Args>
+        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(const std::string name, int dim, SAMS::domain::edges edge, Args&&... args){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef emplaceBoundaryCondition bc must be derived from boundaryConditions");
+            return getVariable(name).emplaceBoundaryCondition<T>(dim, edge, std::forward<Args>(args)...);
+        }
+
+        /**
+         * Emplace a specified boundary condition to both edges of a specified dimension
+         * @param name The name of the variable
+         * @param dim The dimension to add the boundary condition to (0 to rank-1)
+         * @param args The arguments to construct the boundary condition
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to both edges
+         */
+        template<typename T, typename... Args>
+        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(const std::string name, int dim, Args&&... args){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef emplaceBoundaryCondition bc must be derived from boundaryConditions");
+            return getVariable(name).emplaceBoundaryCondition<T>(dim, args...);
+        }
+
+        /**
+         * Emplace a specified boundary condition to both edges of all dimensions
+         * @param name The name of the variable
+         * @param args The arguments to construct the boundary condition
+         * @return The boundary condition added (shared_ptr to boundaryConditions)
+         * @note This adds the same boundary condition instance to all edges of all dimensions
+         */
+        template<typename T, typename... Args>
+        std::shared_ptr<boundaryConditions> emplaceBoundaryCondition(const std::string name, Args&&... args){
+            static_assert(std::is_base_of<boundaryConditions, T>::value, "Error: variableDef emplaceBoundaryCondition bc must be derived from boundaryConditions");
+            return getVariable(name).emplaceBoundaryCondition<T>(std::forward<Args>(args)...);
+        }
+
+        /**
+         * Call all boundary conditions on an edge and dimension
+         * @param dim The dimension to call the boundary conditions on (0 to rank-1)
+         * @param edge The edge to call the boundary conditions on (SAMS::domain::edges)
+         */
+        void applyBoundaryConditions(const std::string &name, int dim, SAMS::domain::edges edge){
+            auto it = variables.find(name);
+            if(it == variables.end()){
+                throw std::runtime_error("Error: variable " + name + " not found in registry\n");
+            }
+            it->second.applyBoundaryConditions(dim, edge);
+        }
+
+        /**
+         * Call all boundary conditions on a specified dimension
+         * @param dim The dimension to call the boundary conditions on (0 to rank-1
+         */
+        void applyBoundaryConditions(const std::string &name, int dim){
+            auto it = variables.find(name);
+            if(it == variables.end()){
+                throw std::runtime_error("Error: variable " + name + " not found in registry\n");
+            }
+            it->second.applyBoundaryConditions(dim);
+        }
+
+        /**
+         * Call all boundary conditions on all dimensions
+         */
+        void applyBoundaryConditions(const std::string &name){
+            auto it = variables.find(name);
+            if(it == variables.end()){
+                throw std::runtime_error("Error: variable " + name + " not found in registry\n");
+            }
+            it->second.applyBoundaryConditions();
+        }
 
         /** 
          * Do a halo exchange for a named variable

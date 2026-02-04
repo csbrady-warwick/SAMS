@@ -79,7 +79,7 @@ namespace portableWrapper
          * Calls the core function for each element in the range.
          * This function is used when the level is maximal to allow vectorization
          */
-        template <int rank, int level = 0, bool serial=false, typename T_func, typename T_cRange, typename... T_oRanges>
+        /*template <int rank, int level = 0, bool serial=false, typename T_func, typename T_cRange, typename... T_oRanges>
         HOSTDEVICEPREFIX HOSTINLINE void forEachVectorized(
             T_func func,
             N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> &tuple, T_cRange cRange, T_oRanges... oRanges)
@@ -101,7 +101,7 @@ namespace portableWrapper
                     }
                 }
             }
-        }
+        }*/
 
         /**
          * CPU parallel forEach function
@@ -115,20 +115,26 @@ namespace portableWrapper
             T_func func,
             N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> &tuple, T_cRange cRange, T_oRanges... oRanges)
         {
-            auto [lower_bound, upper_bound] = getRange(cRange);
+            auto lbub = getRange(cRange);
+            SIGNED_INDEX_TYPE lower_bound = lbub.first;
+            SIGNED_INDEX_TYPE upper_bound = lbub.second;
             if constexpr (level < rank)
             {
-#pragma omp parallel for firstprivate(tuple)
-                for (SIGNED_INDEX_TYPE i = lower_bound; i <= upper_bound; ++i)
+#pragma omp parallel 
                 {
-                    GET<level>(tuple) = i;
-                    if constexpr (sizeof...(oRanges) > 0)
+                    auto local_tuple = tuple;
+                    #pragma omp for
+                    for (SIGNED_INDEX_TYPE i = lower_bound; i <= upper_bound; ++i)
                     {
-                        forEachCore<rank, level + 1, serial>(func, tuple, oRanges...);
-                    }
-                    else
-                    {
-                        applyToDataHost(func, tuple);
+                        GET<level>(tuple) = i;
+                        if constexpr (sizeof...(oRanges) > 0)
+                        {
+                            forEachCore<rank, level + 1, serial>(func, tuple, oRanges...);
+                        }
+                        else
+                        {
+                            applyToDataHost(func, tuple);
+                        }
                     }
                 }
             }
@@ -382,7 +388,7 @@ namespace portableWrapper
             openmp::forEachCore<sizeof...(ranges), 0, true>(func, tuple, ranges...);
         }
 
-        HOSTUNREPEATED void initialize(int& argc, char* argv[])
+        HOSTUNREPEATED void initialize([[maybe_unused]] int& argc, [[maybe_unused]]char* argv[])
         {
             // OpenMP initialization can be done here if needed
             // For now, we assume OpenMP is already initialized by the compiler/runtime

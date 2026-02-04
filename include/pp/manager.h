@@ -85,9 +85,9 @@ namespace portableWrapper {
         class destructingData
         {
             void *data;
-            size_t elements;
             void (*deleter)(void *, size_t, arrayTags, bool) = nullptr;
             arrayTags tag;
+            size_t elements;
             bool owned = true;
             
         public:
@@ -624,6 +624,11 @@ namespace portableWrapper {
     void clear()
     {
         destructors.clear();
+    }
+
+    void finalize()
+    {
+        clear();
     }
     
     }; // class portableArrayManager

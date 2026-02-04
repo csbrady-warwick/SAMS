@@ -24,7 +24,6 @@ namespace LARE
   {
     T_dataType xpass, ypass, zpass;
     volumeArray rho1;
-    volumeArray dm;
     volumeArray cv2;
     volumeArray cvc1;
     volumeArray db1;

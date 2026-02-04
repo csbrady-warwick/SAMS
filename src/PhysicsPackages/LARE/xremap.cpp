@@ -15,14 +15,13 @@ namespace LARE
 
     void LARE3D::remap_x(simulationData &data, remapData &remap_data)
     {
-        // return;
         using Range = pw::Range;
         pw::portableArrayManager xRemapManager;
         remap_data.flux.nullify();
 
         xRemapManager.allocate(remap_data.flux, Range(-2, data.nx + 2), Range(-1, data.ny + 2), Range(-1, data.nz + 2));
 
-        pw::assign(remap_data.dm, 0.0);
+        pw::assign(data.dm, 0.0);
         pw::assign(remap_data.rho1, data.rho);
 
         // Main remap loop
@@ -106,23 +105,23 @@ namespace LARE
                 T_indexType ixm = ix - 1;
                 data.bz(ix, iy, iz) = data.bz(ix, iy, iz) - remap_data.flux(ix, iy, iz) + remap_data.flux(ixm, iy, iz);
             },
-            Range(0, data.nx), Range(1, data.ny), Range(0, data.nz));
+            Range(1, data.nx), Range(1, data.ny), Range(0, data.nz));
 
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
                 T_indexType izm = iz - 1;
                 data.bx(ix, iy, iz) = data.bx(ix, iy, iz) + remap_data.flux(ix, iy, iz) - remap_data.flux(ix, iy, izm);
             },
-            Range(1, data.nx), Range(1, data.ny), Range(0, data.nz));
+            Range(0, data.nx), Range(1, data.ny), Range(1, data.nz));
         pw::fence();
 
         x_mass_flux(data, remap_data); // Mass flux in x-direction
-        dm_x_bcs(data, remap_data);    // Apply boundary conditions to mass flux
+        dm_x_bcs();    // Apply boundary conditions to mass flux
 
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
                 T_indexType ixm = ix - 1;
-                data.rho(ix, iy, iz) = (remap_data.rho1(ix, iy, iz) * data.cv1(ix, iy, iz) + remap_data.dm(ixm, iy, iz) - remap_data.dm(ix, iy, iz)) / remap_data.cv2(ix, iy, iz);
+                data.rho(ix, iy, iz) = (remap_data.rho1(ix, iy, iz) * data.cv1(ix, iy, iz) + data.dm(ixm, iy, iz) - data.dm(ix, iy, iz)) / remap_data.cv2(ix, iy, iz);
             },
             Range(1, data.nx), Range(1, data.ny), Range(1, data.nz));
 
@@ -212,14 +211,14 @@ namespace LARE
                 T_indexType iyp = iy + 1;
                 T_indexType izp = iz + 1;
 
-                remap_data.flux(ix, iy, iz) = (remap_data.dm(ix, iy, iz) + remap_data.dm(ixp, iy, iz) + remap_data.dm(ix, iyp, iz) + remap_data.dm(ixp, iyp, iz) + remap_data.dm(ix, iy, izp) + remap_data.dm(ixp, iy, izp) + remap_data.dm(ix, iyp, izp) + remap_data.dm(ixp, iyp, izp)) * 0.125;
+                remap_data.flux(ix, iy, iz) = (data.dm(ix, iy, iz) + data.dm(ixp, iy, iz) + data.dm(ix, iyp, iz) + data.dm(ixp, iyp, iz) + data.dm(ix, iy, izp) + data.dm(ixp, iy, izp) + data.dm(ix, iyp, izp) + data.dm(ixp, iyp, izp)) * 0.125;
             },
             Range(-1, data.nx), Range(0, data.ny), Range(0, data.nz));
 
         pw::fence();
 
         // And copy back to dm
-        pw::assign(remap_data.dm(Range(-1, data.nx), Range(0, data.ny), Range(0, data.nz)), remap_data.flux(Range(-1, data.nx), Range(0, data.ny), Range(0, data.nz)));
+        pw::assign(data.dm(Range(-1, data.nx), Range(0, data.ny), Range(0, data.nz)), remap_data.flux(Range(-1, data.nx), Range(0, data.ny), Range(0, data.nz)));
 
         pw::fence();
 
@@ -228,7 +227,7 @@ namespace LARE
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
                 T_indexType ixm = ix - 1;
                 // Vertex density after remap
-                remap_data.rho_v1(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.cv1(ix, iy, iz) + remap_data.dm(ixm, iy, iz) - remap_data.dm(ix, iy, iz)) / remap_data.cv2(ix, iy, iz);
+                remap_data.rho_v1(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.cv1(ix, iy, iz) + data.dm(ixm, iy, iz) - data.dm(ix, iy, iz)) / remap_data.cv2(ix, iy, iz);
             },
             Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
@@ -263,7 +262,7 @@ namespace LARE
         pw::fence();
         remap_data.xpass = 0;
 
-        this->boundary_conditions(data);
+        this->boundary_conditions();
     } // END LARE3D::remap_x
 
     // Flux of by due to vx
@@ -416,7 +415,7 @@ namespace LARE
 
                 T_dataType Di = sign_v * ss * pw::min({std::abs(Da) * dxbu, std::abs(dfi), std::abs(dfu)});
 
-                remap_data.dm(ix, iy, iz) = (fu + Di * (1.0 - phi)) * o_v;
+                data.dm(ix, iy, iz) = (fu + Di * (1.0 - phi)) * o_v;
             },
             Range(0, data.nx), Range(0, data.ny + 1), Range(0, data.nz + 1));
         pw::fence();
@@ -475,9 +474,9 @@ namespace LARE
                 T_dataType Di = sign_v * ss * pw::min({std::abs(Da) * dxbu, std::abs(dfi), std::abs(dfu)});
 
                 T_dataType rhou = remap_data.rho1(ix, iy, iz) * vad_p + remap_data.rho1(ixp, iy, iz) * vad_m;
-                T_dataType dmu = std::abs(remap_data.dm(ix, iy, iz)) / dxbu / rhou;
+                T_dataType dmu = std::abs(data.dm(ix, iy, iz)) / dxbu / rhou;
 
-                remap_data.flux(ix, iy, iz) = (fu + Di * (1.0 - dmu)) * remap_data.dm(ix, iy, iz);
+                remap_data.flux(ix, iy, iz) = (fu + Di * (1.0 - dmu)) * data.dm(ix, iy, iz);
             },
             Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
@@ -526,7 +525,7 @@ namespace LARE
                 T_dataType Di = sign_v * ss * pw::min({std::abs(Da) * dxbu, std::abs(dfi), std::abs(dfu)});
 
                 T_dataType rhou = remap_data.rho_v(ix, iy, iz) * vad_p + remap_data.rho_v(ixp, iy, iz) * vad_m;
-                T_dataType dmu = std::abs(remap_data.dm(ix, iy, iz)) / dxbu / rhou;
+                T_dataType dmu = std::abs(data.dm(ix, iy, iz)) / dxbu / rhou;
 
                 remap_data.flux(ix, iy, iz) = fu + Di * (1.0 - dmu);
             },
@@ -543,13 +542,13 @@ namespace LARE
                     T_dataType m = remap_data.rho_v1(ix, iy, iz) * remap_data.cv2(ix, iy, iz);
                     T_dataType mp = remap_data.rho_v1(ixp, iy, iz) * remap_data.cv2(ixp, iy, iz);
 
-                    T_dataType ai = ((data.*mPtr)(ix, iy, iz) - remap_data.flux(ixm, iy, iz)) * remap_data.dm(ixm, iy, iz) / m - ((data.*mPtr)(ix, iy, iz) - remap_data.flux(ix, iy, iz)) * remap_data.dm(ix, iy, iz) / m;
+                    T_dataType ai = ((data.*mPtr)(ix, iy, iz) - remap_data.flux(ixm, iy, iz)) * data.dm(ixm, iy, iz) / m - ((data.*mPtr)(ix, iy, iz) - remap_data.flux(ix, iy, iz)) * data.dm(ix, iy, iz) / m;
 
-                    T_dataType aip = ((data.*mPtr)(ixp, iy, iz) - remap_data.flux(ix, iy, iz)) * remap_data.dm(ix, iy, iz) / mp - ((data.*mPtr)(ixp, iy, iz) - remap_data.flux(ixp, iy, iz)) * remap_data.dm(ixp, iy, iz) / mp;
+                    T_dataType aip = ((data.*mPtr)(ixp, iy, iz) - remap_data.flux(ix, iy, iz)) * data.dm(ix, iy, iz) / mp - ((data.*mPtr)(ixp, iy, iz) - remap_data.flux(ixp, iy, iz)) * data.dm(ixp, iy, iz) / mp;
 
                     T_dataType dk = ((data.*mPtr)(ixp, iy, iz) - (data.*mPtr)(ix, iy, iz)) * (remap_data.flux(ix, iy, iz) - 0.5 * ((data.*mPtr)(ixp, iy, iz) + (data.*mPtr)(ix, iy, iz))) - 0.5 * ai * ((data.*mPtr)(ix, iy, iz) - remap_data.flux(ix, iy, iz)) + 0.5 * aip * ((data.*mPtr)(ixp, iy, iz) - remap_data.flux(ix, iy, iz));
 
-                    dk = dk * remap_data.dm(ix, iy, iz) * 0.5;
+                    dk = dk * data.dm(ix, iy, iz) * 0.5;
                     pw::atomic::accelerated::Add(data.delta_ke(ixp, iy, iz), dk);
                     pw::atomic::accelerated::Add(data.delta_ke(ixp, iyp, iz), dk);
                     pw::atomic::accelerated::Add(data.delta_ke(ixp, iyp, izp), dk);
@@ -560,7 +559,7 @@ namespace LARE
         pw::fence();
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
-                remap_data.flux(ix, iy, iz) *= remap_data.dm(ix, iy, iz);
+                remap_data.flux(ix, iy, iz) *= data.dm(ix, iy, iz);
             },
             Range(-1, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();

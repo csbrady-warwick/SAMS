@@ -6,100 +6,52 @@
 #include <fstream>
 #include "harness.h"
 #include "shared_data.h"
-#include "include/timer.h"
+#include "timer.h"
 #include "axisRegistry.h"
 #include "variableRegistry.h"
 #include "mpiManager.h"
 #include "welcome.h"
 
+//Example initial conditions
+#include "SodShockTube.h"
+#include "BrioAndWu.h"
+#include "MHDRotor.h"
+#include "OrszagTang.h"
+#include "OrszagTang3D.h"
+
 #include "builtInBoundaryConditions.h"
 
 #include "runner.h"
+#include "lareic.h"
 
 int main(int argc, char *argv[]){
 
     //Initialize MPI
     SAMS::MPI::initialize(argc, argv);
-
-    SAMS::harness harness;
-
-    SAMS::runner<
-        LARE::LARE3D> runner;
-
-    runner.initialize(argc, argv);
-    runner.activateSimulation("LARE3D");
-    runner.initializeSimulations();
-
-    SAMS::printWelcomeMessage();
-    //MPI auto decomposition
-    auto& mpi = harness.MPIManager;
-    auto& axisReg = harness.axisRegistry;
-    auto& varReg = harness.variableRegistry;
-    mpi.autoDecomposition({false,false,false});
     //Initialize portable wrapper
     portableWrapper::initialize(argc, argv);
+
+    //Print welcome message
+    SAMS::printWelcomeMessage();
+    //Createa and initialize the runner
+    SAMS::runner<LARE::LARE3D, LARE::LARE3DInitialConditions, examples::SodShockTube, examples::BrioAndWu, examples::MHDRotor, examples::OrszagTang, examples::OrszagTang3D> runner;
+    runner.initialize(argc, argv);
+    //Finish welcome message
     SAMS::finishWelcomeMessage();
-
-    //Create the simulation (LARE) and data objects
-    LARE::LARE3D S(harness);
-    LARE::simulationData data;
-
-    //Setup control variables
-    S.controlvariables(data);
-    data.visc2_norm=data.visc2;
-
-    //Register axes and attach them to MPI dimensions
-    axisReg.registerAxis("X", SAMS::MPIAxis(0));
-    axisReg.registerAxis("Y", SAMS::MPIAxis(1));
-    axisReg.registerAxis("Z", SAMS::MPIAxis(2));
-    //Tell LARE to register its variables
-    S.registerVars();
-    //Other simulations would register their variables here too
-
-    //Set the axis domains and decompose them
-    axisReg.setDomain("X", data.nx, data.x_min, data.x_max);
-    axisReg.setDomain("Y", data.ny, data.y_min, data.y_max);
-    axisReg.setDomain("Z", data.nz, data.z_min, data.z_max);
-
-    mpi.decomposeAllAxes();
-
-    varReg.allocateAll();
-
-    //Tell LARE to grab the shared allocated variables
-		S.allocate(data);
-    //Tell LARE to set up its grid
-    S.grid(data);
-
-		portableWrapper::fence();
-    S.initial_conditions(data);
-		portableWrapper::fence();
-    S.boundary_conditions(data);
-    portableWrapper::fence();
-    timer t;
-    t.begin("Main Loop");
-    data.step=0;
-
-    while (true)
-    {
-      SAMS::cout << data.step << " " << data.time << std::endl;      
-      //if (data.step%10==0) S.output(data);
-      if ((data.step >= data.nsteps && data.nsteps >= 0) || (data.time >= data.t_end))
-        break;
-
-      S.lagrangian_step(data);    // lagran.cpp
-      S.eulerian_remap(data); // remap.cpp
-      data.step++;
-      if (data.rke) S.energy_correction(data); // diagnostics.cpp
-      S.eta_calc(data);            // lagran.cpp
+    
+    //Use the parameters passed to set up and run the simulations
+    for (int i=1;i<argc;i++){
+        std::string argStr = argv[i];
+        runner.activatePackage(argStr);
     }
-    t.end();
+    //Initialize the packages
+    runner.initializePackages();
+    //Run the packages until a package requests to stop
+    runner.runPackages();
+    //Finish the packages
+    runner.finalizePackages();
+    //Finalize the runner
+    runner.finalize();
 
-		S.output(data);
-
-		S.manager.clear();
-    axisReg.finalize();
-    varReg.finalize();
     portableWrapper::finalize();
-    SAMS::MPI::finalize();
-
 }

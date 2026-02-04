@@ -71,6 +71,7 @@ namespace portableWrapper
 		public:
 		DEVICEPREFIX INLINE static constexpr bool rowMajor()
 		{
+			return false;
 			if constexpr (tag == arrayTags::host)
 			{
 				return true; // Host arrays are row-major
@@ -145,9 +146,9 @@ namespace portableWrapper
 		{
 			static_assert(sizeof...(r) + level + 1 == rank, "Number of indices must match the rank of the portable array.");
 			constexpr int rlevel = level;
-			SIGNED_INDEX_TYPE lb = lower_bound[rlevel];
 			SIGNED_INDEX_TYPE index = c*stride[rlevel] ;
 			#ifdef ARRAY_BOUNDS_CHECKING
+			SIGNED_INDEX_TYPE lb = lower_bound[rlevel];
             if (c < lb || c > upper_bound[rlevel]) {
 				if (Name[0] != '\0') {
 					std::cout << "Index out of bounds in array " << Name << ": " << c << " not in [" << lb << ", " << upper_bound[rlevel] << "]\n";
@@ -181,9 +182,9 @@ namespace portableWrapper
 		DEVICEPREFIX INLINE UNSIGNED_INDEX_TYPE buildIndexZB(T_current c, T_others... r) const
 		{
 			constexpr int rlevel = level;
-			SIGNED_INDEX_TYPE lb = lower_bound[rlevel];
 			UNSIGNED_INDEX_TYPE index = c * stride[rlevel];
 			#ifdef ARRAY_BOUNDS_CHECKING
+			SIGNED_INDEX_TYPE lb = lower_bound[rlevel];
             if (c < 0 || c > size[rlevel]) {
 				if (Name[0] != '\0') {
 					std::cout << "Index out of bounds in array " << Name << ": " << c << " not in [" << 0 << ", " << size[rlevel] << "]\n";
@@ -641,7 +642,7 @@ namespace portableWrapper
 		/**
 		 * Get the zero-based lower bound of a given dimension.
 		 */
-		DEVICEPREFIX SIGNED_INDEX_TYPE getLowerBoundZeroBased(int dimension) const
+		DEVICEPREFIX SIGNED_INDEX_TYPE getLowerBoundZeroBased([[maybe_unused]] int dimension) const
 		{
 			return 0;
 		}

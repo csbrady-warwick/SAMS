@@ -63,6 +63,8 @@ namespace portableWrapper
         template <typename T_func, typename T_cRange1, typename T_cRange2>
         HOSTDEVICEPREFIX HOSTINLINE void forEachParallel(T_func func,T_cRange1 cRange1, T_cRange2 cRange2)
         {
+            //Yes, this could be done with a structured binding, but it causes
+            //CLANG frontend to crash when parsing
             auto range1 = getRange(cRange1);
             auto range2 = getRange(cRange2);
             T_indexType lower_bound1 = range1.lower_bound; T_indexType upper_bound1 = range1.upper_bound;

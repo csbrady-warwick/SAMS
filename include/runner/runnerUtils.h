@@ -3,6 +3,7 @@
 
 #include <type_traits>
 #include <tuple>
+#include <utility>
 #include "pp/callableTraits.h"
 
 namespace SAMS{
@@ -65,7 +66,7 @@ namespace SAMS{
      */
     template<typename... T, typename... Rest>
     struct uniqueTuple<std::tuple<T...>, Rest...> {
-        using type = uniqueTuple<T..., Rest...>::type;
+        using type = typename uniqueTuple<T..., Rest...>::type;
     };
 
     /**
@@ -114,53 +115,8 @@ namespace SAMS{
     using tupleTail_t = typename tupleTail<N, T_tuple>::type;
 
     /**
-     * Fill a destination tuple selecting elements from a source by type
-     */
-    template<int level=0, typename T_dest, typename T_src>
-    auto getFunctionParametersCore(T_src& src)
-    {
-        using srcType = std::decay_t<std::tuple_element_t<level, T_dest>>;
-        if constexpr (level < std::tuple_size_v<T_dest>-1)
-        {
-            return std::tuple_cat(std::ref(std::get<srcType>(src)),
-                                  getFunctionParametersCore<level+1, T_dest, T_src>(src));
-        } else {
-            return std::make_tuple(std::ref(std::get<srcType>(src)));
-        }
-    }
-
-    /**
-     * Get a tuple of function parameters from a function type and a source tuple
-     */
-    template<typename T_func, typename T_tuple>
-    auto getFunctionParameters(T_tuple& tuple)
-    {
-        if constexpr (std::tuple_size_v<T_tuple> == 0){
-            return std::tuple<>();
-        } else {
-            using T_call = far::callableTraits<T_func>::params;
-            #pragma warning WIBBLE
-            //return getFunctionParametersCore<0, T_call>(tuple);
-            return std::tuple<>();
-        }
-    }
-
-    /**
-     * Get a tuple of elements from a source tuple by type
-     */
-    template<typename T_dest, typename T_src>
-    auto getCallTupleElements(T_src& src)
-    {
-        if constexpr (std::tuple_size_v<T_dest> == 0 || std::tuple_size_v<T_src> == 0){
-            return std::tuple<>();
-        } else {
-            return getFunctionParametersCore<0, T_dest, T_src>(src);
-        }
-    }
-
-    /**
      * Get the index of a type in a tuple
-     * If the type is not found, a static_assert false is triggered.
+     * If the type is not found, returns -1
      */
     template<typename T, typename T_tuple, std::size_t level=0>
     struct tupleTypeIndex {
@@ -176,7 +132,105 @@ namespace SAMS{
     };
 
     template<typename T, typename T_tuple>
-    static constexpr std::size_t tupleTypeIndex_v = tupleTypeIndex<T, T_tuple>::value;
+    static constexpr std::int64_t tupleTypeIndex_v = tupleTypeIndex<T, T_tuple>::value;
+
+
+    /**
+     * Get a type from the first tuple that contains it
+     */
+    template<typename T, typename... T_tuples>
+    struct tupleTypeFinder;
+
+    template<typename T, typename T_first, typename... T_rest>
+    struct tupleTypeFinder<T, T_first, T_rest...> {
+        using type = std::conditional_t<
+            (tupleTypeIndex_v<T, T_first> >= 0),
+            T,
+            typename tupleTypeFinder<T, T_rest...>::type
+        >;
+    };
+
+    template<typename T>
+    struct tupleTypeFinder<T> {
+        using type = void;
+    };
+
+    template<typename T, typename... T_tuples>
+    using tupleTypeFinder_t = typename tupleTypeFinder<T, T_tuples...>::type;
+
+
+    /**
+     * Get a reference to a tuple element by type
+     * Find the first instance of that type in the source tuple(s)
+     */
+    template<typename T, typename T_src, typename... T_others>
+    decltype(auto) getItemFromTuple(T_src& src, T_others&&... others)
+    {
+        using Tvalue = std::remove_reference_t<T>;
+        using Tref = std::add_lvalue_reference_t<Tvalue>;
+
+        constexpr int64_t indexref = tupleTypeIndex_v<Tref, T_src>;
+        constexpr int64_t indexvalue = tupleTypeIndex_v<Tvalue, T_src>;
+        if constexpr (indexref >= 0){
+            return std::get<Tref>(src);
+        } else if constexpr (indexvalue >= 0){
+            return std::get<Tvalue>(src);
+        } else {
+            if constexpr (sizeof...(T_others) > 0){
+                return getItemFromTuple<T>(std::forward<T_others>(others)...);
+            } else {
+                static_assert(portableWrapper::alwaysFalse<T>::value, "Error: Type not found in any source tuple in getItem.");
+            }
+        }
+    }
+
+
+    /**
+     * Fill a destination tuple selecting elements from a source by type
+     */
+    template<typename T_dest, int level=0, typename... T_tuples>
+    auto getFunctionParametersCore(T_tuples&& ... src)
+    {        
+        auto& current = getItemFromTuple<std::tuple_element_t<level, T_dest>>(std::forward<T_tuples>(src)...);
+        if constexpr (level < std::tuple_size_v<T_dest>-1)
+        {
+            return std::tuple_cat(std::forward_as_tuple(current),
+                                  getFunctionParametersCore<T_dest,level+1>(std::forward<T_tuples>(src)...));
+        } else {
+            return std::forward_as_tuple(current);
+        }
+    }
+
+    /**
+     * Get a tuple of function parameters from a function type and a source tuple
+     */
+    template<typename T_func, typename T_tuple>
+    auto getFunctionParameters(T_tuple& tuple)
+    {
+        if constexpr (std::tuple_size_v<T_tuple> == 0){
+            return std::tuple<>();
+        } else {
+            using T_call = typename far::callableTraits<T_func>::params;
+            if constexpr (std::tuple_size_v<T_call> == 0){
+                return std::tuple<>();
+            } else {
+                return getFunctionParametersCore<T_call>(tuple);
+            }
+        }
+    }
+
+    /**
+     * Get a tuple of elements from a source tuple by type
+     */
+    template<typename T_dest, typename T_src>
+    auto getCallTupleElements(T_src& src)
+    {
+        if constexpr (std::tuple_size_v<T_dest> == 0 || std::tuple_size_v<T_src> == 0){
+            return std::tuple<>();
+        } else {
+            return getFunctionParametersCore<T_dest>(src);
+        }
+    }
 
     //Get a type the consists of the union of two tuples
     template<typename ...Types>

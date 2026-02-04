@@ -22,10 +22,20 @@ namespace LARE
     namespace pw = portableWrapper;
 
     /**
+     * Register LARE's axes with the axis registry.
+     */
+    void LARE3D::registerAxes(SAMS::harness &harness)
+    {
+        auto &axisReg = harness.axisRegistry;
+        axisReg.registerAxis("X", SAMS::MPIAxis(0));
+        axisReg.registerAxis("Y", SAMS::MPIAxis(1));
+        axisReg.registerAxis("Z", SAMS::MPIAxis(2));
+    }
+
+    /**
      * Register variables with the portable array manager.
      */
-
-    void LARE3D::registerVars()
+    void LARE3D::registerVariables(SAMS::harness &harness)
     {
 
         auto &varRegistry = harness.variableRegistry;
@@ -63,7 +73,7 @@ namespace LARE
      * Allocate the data arrays for the LARE3D.
      * This allocates the permanent state arrays that are used throughout the LARE3D.
      */
-    void LARE3D::allocate(simulationData &data)
+    void LARE3D::allocate(SAMS::harness &harness, simulationData &data)
     {
         T_sizeType nx, ny, nz;
 
@@ -82,14 +92,6 @@ namespace LARE
         data.ybLocalRange = axRegistry.getLocalRange("Y", SAMS::staggerType::HALF_CELL);
         data.zbLocalRange = axRegistry.getLocalRange("Z", SAMS::staggerType::HALF_CELL);
 
-        std::cout << "Local Ranges: \n";
-        std::cout << "XC: " << data.xcLocalRange << "\n";
-        std::cout << "YC: " << data.ycLocalRange << "\n";
-        std::cout << "ZC: " << data.zcLocalRange << "\n";
-        std::cout << "XB: " << data.xbLocalRange << "\n";
-        std::cout << "YB: " << data.ybLocalRange << "\n";
-        std::cout << "ZB: " << data.zbLocalRange << "\n";
-
         // Get the ranges for the actual domain (no ghost cells)
         data.xcLocalDomainRange = axRegistry.getLocalDomainRange("X", SAMS::staggerType::CENTRED);
         data.ycLocalDomainRange = axRegistry.getLocalDomainRange("Y", SAMS::staggerType::CENTRED);
@@ -98,22 +100,9 @@ namespace LARE
         data.ybLocalDomainRange = axRegistry.getLocalDomainRange("Y", SAMS::staggerType::HALF_CELL);
         data.zbLocalDomainRange = axRegistry.getLocalDomainRange("Z", SAMS::staggerType::HALF_CELL);
 
-        std::cout << "Local Domain Ranges: \n";
-        std::cout << "XC: " << data.xcLocalDomainRange << "\n";
-        std::cout << "YC: " << data.ycLocalDomainRange << "\n";
-        std::cout << "ZC: " << data.zcLocalDomainRange << "\n";
-        std::cout << "XB: " << data.xbLocalDomainRange << "\n";
-        std::cout << "YB: " << data.ybLocalDomainRange << "\n";
-        std::cout << "ZB: " << data.zbLocalDomainRange << "\n";
-
         data.nx = nx;
         data.ny = ny;
         data.nz = nz;
-
-        data.mu0_si = mu0_si;
-        data.time = 0.0;
-
-        manager.clear(); // Delete any allocated data
 
         using Range = pw::Range;
         // Grab the final variable sizes from the registry and wrap the arrays
@@ -169,6 +158,38 @@ namespace LARE
         manager.allocate(data.cv1, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
         manager.allocate(data.cvc, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
 
+        Range xcp = pw::Range(0, data.nx + 1);
+        Range ycp = pw::Range(0, data.ny + 1);
+        Range zcp = pw::Range(0, data.nz + 1);
+        Range ycpp = pw::Range(0, data.ny + 2);
+        Range zcpp = pw::Range(0, data.nz + 2);
+        Range xbp = pw::Range(-1, data.nx + 1);
+        Range ybp = pw::Range(-1, data.ny + 1);
+        Range zbp = pw::Range(-1, data.nz + 1);
+        // Allocate arrays using the portableArrayManager
+        manager.allocate(data.bx1, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.by1, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.bz1, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.alpha1, xcp, ycpp, zcpp);
+        manager.allocate(data.alpha2, xbp, ycp, zcpp);
+        manager.allocate(data.alpha3, data.xcLocalRange, data.ycLocalRange, zcp);
+        manager.allocate(data.visc_heat, xcp, ycp, zcp);
+        manager.allocate(data.pressure, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.p_e, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.p_i, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
+        manager.allocate(data.rho_v, xbp, ybp, zbp);
+        manager.allocate(data.cv_v, xbp, ybp, zbp);
+        manager.allocate(data.fx, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
+        manager.allocate(data.fy, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
+        manager.allocate(data.fz, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
+        manager.allocate(data.fx_visc, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
+        manager.allocate(data.fy_visc, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
+        manager.allocate(data.fz_visc, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
+        manager.allocate(data.flux_x, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
+        manager.allocate(data.flux_y, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
+        manager.allocate(data.flux_z, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
+        manager.allocate(data.curlb, data.xbLocalDomainRange, data.ybLocalDomainRange, data.zbLocalDomainRange);
+
         axRegistry.fillPPLocalAxis("X", data.xc, SAMS::staggerType::CENTRED);
         axRegistry.fillPPLocalAxis("Y", data.yc, SAMS::staggerType::CENTRED);
         axRegistry.fillPPLocalAxis("Z", data.zc, SAMS::staggerType::CENTRED);
@@ -209,7 +230,7 @@ namespace LARE
             manager.allocate(data.delta_ke, Range(-1, nx + 2), Range(-1, ny + 2), Range(-1, nz + 2));
         }
 
-        data.mpiType = SAMS::gettypeRegistry().getMPIType(SAMS::gettypeRegistry().getTypeID<T_dataType>());
+        data.mpiType = SAMS::gettypeRegistry().getMPIType<T_dataType>();
     }
 
     /**
@@ -218,7 +239,6 @@ namespace LARE
     void LARE3D::grid(simulationData &data)
     {
 
-        using Range = pw::Range;
         pw::portableArrayManager localManager;
 
         auto hyv = localManager.create<double>(pw::Range(-2, data.nx + 2));

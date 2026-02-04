@@ -45,7 +45,7 @@ namespace portableWrapper
             // For CUDA <12.1 4096 bytes is the maximum size of a kernel argument
             // For CUDA >=12.1 this is increased to 32768 bytes
             #if defined(__CUDACC_VER_MAJOR__) && (__CUDACC_VER_MAJOR__ >= 12) && (__CUDACC_VER_MINOR__ >= 1)
-            constexpr size_t maxFormalArgSize = 32768; // Default value for CUDA devices with compute capability >= 12.1
+            constexpr size_t maxFormalArgSize = 32764/2; // Default value for CUDA devices with compute capability >= 12.1
             #elif defined(__CUDACC_VER_MAJOR__) && (__CUDACC_VER_MAJOR__ >= 2)
             constexpr size_t maxFormalArgSize=4096; // Default value for CUDA devices with compute capability >= 2.0
             #else

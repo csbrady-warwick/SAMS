@@ -17,8 +17,8 @@
 
 #include "harnessDef.h"
 
-#define SIGNED_INDEX_TYPE int64_t
-#define UNSIGNED_INDEX_TYPE size_t
+#define SIGNED_INDEX_TYPE SAMS::T_indexType
+#define UNSIGNED_INDEX_TYPE SAMS::T_sizeType
 #define SIZE_TYPE size_t
 
 #define COUNT_TYPE size_t
@@ -129,6 +129,9 @@
 
 namespace portableWrapper
 {
+
+    using T_indexType = SAMS::T_indexType;
+    using T_sizeType = SAMS::T_sizeType;
     enum arrayTags
     {
         host = 1,

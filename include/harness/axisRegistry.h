@@ -115,6 +115,7 @@ namespace SAMS
             using lineArray = portableWrapper::acceleratedArray<T_dataType, 1>;
             using hostLineArray = portableWrapper::hostArray<T_dataType, 1>;
 
+            portableWrapper::portableArrayManager &manager;
             bool logicalAxis = false; //Is this axis a logical axis (i.e. it does not correspond to physical data, but instead logical indices);
             /**
              * Simple class to tie together axis and delta arrays
@@ -214,8 +215,8 @@ namespace SAMS
             template <typename dataFn>
             void createPositionAxis(staggerType stagger, portableWrapper::arrayTags tag, dataFn &fn)
             {
-                using T_dataType = typename far::callableTraits<dataFn>::type;
-                //static_assert(std::is_trivially_copyable_v<T_dataType>, "Error: axisRegistry createPositionAxis function must return a trivially copyable type\n");
+                /*using T_dataType = typename far::callableTraits<dataFn>::type;
+                static_assert(std::is_trivially_copyable_v<T_dataType>, "Error: axisRegistry createPositionAxis function must return a trivially copyable type\n");*/
                 if (tag == portableWrapper::arrayTags::host) {
                     createPositionAxisCore<dataFn, portableWrapper::arrayTags::host>(stagger, fn);
                 } else if (tag == portableWrapper::arrayTags::accelerated){
@@ -316,11 +317,11 @@ namespace SAMS
              * @param fn The function to compute the delta values
              * @param initialValue The initial value at the lower boundary of the axis
              */
-            template<typename deltaFn>
+            /*template<typename deltaFn>
             void createDeltaAxis(staggerType stagger, portableWrapper::arrayTags tag, deltaFn fn, T_dataType initialValue)
             {
                 //If axis already exists, return
-                /*if (axisData.find(stagger) != axisData.end() &&
+                if (axisData.find(stagger) != axisData.end() &&
                     axisData[stagger].find(tag) != axisData[stagger].end())
                 {
                     return;
@@ -378,8 +379,8 @@ namespace SAMS
                         axisArray(i) -= axisDelta(j);
                     }
                 }, portableWrapper::Range(lowerBound, domainLower-1));
-                portableWrapper::fence();*/
-            }
+                portableWrapper::fence();
+            }*/
 
             /**
              * Convenience function to create a linear axis from a given lower bound and uniform grid spacing
@@ -457,24 +458,21 @@ namespace SAMS
 
         public:
             dimension dim{SAMS::staggerType::HALF_CELL};
-            portableWrapper::portableArrayManager &manager;
             SIGNED_INDEX_TYPE localLB = 0;
             SIGNED_INDEX_TYPE localUB = 0;
             COUNT_TYPE maxLowerGhosts = 0;
             COUNT_TYPE maxUpperGhosts = 0;
             bool periodic = false;
-            MPIAxis MPIAxisIndex;
 
             axisInfo() = delete; // Delete default constructor
             axisInfo(portableWrapper::portableArrayManager &mgr)
                 : manager(mgr) {}
             axisInfo(portableWrapper::portableArrayManager &mgr, MPIAxis mpiAxis)
-                : manager(mgr), MPIAxisIndex(mpiAxis) {}
+                : manager(mgr) {dim.attachMPIAxis(mpiAxis);}
             axisInfo(portableWrapper::portableArrayManager &mgr, bool isLogical)
                 : manager(mgr), logicalAxis(isLogical) {}
             axisInfo(portableWrapper::portableArrayManager &mgr, MPIAxis mpiAxis, bool isLogical)
-                : manager(mgr), MPIAxisIndex(mpiAxis), logicalAxis(isLogical) {}
-
+                : manager(mgr), logicalAxis(isLogical) {dim.attachMPIAxis(mpiAxis);}
             axisInfo(const axisInfo &) = delete;
             axisInfo &operator=(const axisInfo &) = delete;
             axisInfo(axisInfo &&) = default;
@@ -1047,7 +1045,7 @@ namespace SAMS
         MPIAxis getMPIAxis(const std::string &name) const
         {
             auto &ax = getAxis(name);
-            return ax.MPIAxisIndex;
+            return ax.dim.mpiAxis;
         }
 
         /**
@@ -1058,7 +1056,7 @@ namespace SAMS
         void setMPIAxis(const std::string &name, MPIAxis mpiAxis)
         {
             auto &ax = getAxis(name);
-            ax.MPIAxisIndex = mpiAxis;
+            ax.dim.attachMPIAxis(mpiAxis);
         }
 
         /**
@@ -1151,6 +1149,8 @@ namespace SAMS
             auto &ax = getAxis(name);
             return ax.dim.getLocalDomainRange(stagger);
         }
+
+
 
         /**
          * Get a portable array wrapping the axis data

@@ -20,23 +20,9 @@
 namespace LARE
 {
 
-// Swap between float and double for numerical variables
-#ifdef USE_FLOAT
-  using T_dataType = float;
-#else
-  using T_dataType = double;
-#endif
-
-// Swap between int32_t and size_t for indexing
-// This is to set the sizes of objects so should be unsigned
-#ifdef USE_INT32_SIZES
-  using T_sizeType = uint32_t;
-#else
-  using T_sizeType = size_t;
-#endif
-
-  // The indexType is the signed version of sizeType
-  using T_indexType = std::make_signed<T_sizeType>::type;
+  using T_dataType = SAMS::T_dataType;
+  using T_sizeType = SAMS::T_sizeType;
+  using T_indexType = SAMS::T_indexType;
 
   using volumeArray = portableWrapper::acceleratedArray<T_dataType, 3>;
   using hostVolumeArray = portableWrapper::hostArray<T_dataType, 3>;
