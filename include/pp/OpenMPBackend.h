@@ -18,6 +18,7 @@
 #include "defs.h"
 #include "utils.h"
 #include "range.h"
+#include "array.h"
 #include "OpenMPUnrolledBackend.h"
 #include <cstring>
 #include <vector>
@@ -44,6 +45,10 @@ namespace portableWrapper
         HOSTINLINE HOSTDEVICEPREFIX void forEachCore(
             T_func func,
             N_ary_tuple_type_t<SIGNED_INDEX_TYPE, rank> &tuple, T_cRange cRange, T_oRanges... oRanges);
+
+        //And for the applyKernel function
+        template <typename T_func, typename... T_ranges>
+        HOSTUNREPEATED void applyKernel(T_func func, T_ranges... ranges);
 
         /**
          * CPU serial forEach function
@@ -321,11 +326,58 @@ namespace portableWrapper
             }
         }
 
+    /**
+     * Functor to assign one portableArray to another.
+     */
+    template<typename T, int rank, arrayTags arrayTag>
+      struct trivialAssignArray{
+        using pa = portableArray<T, rank, arrayTag>;
+        pa dest;
+        pa src;
+
+        INLINE trivialAssignArray(pa &dest, const pa &src)
+          : dest(dest), src(src) {}
+
+        template<typename... T_indices>
+        INLINE void operator()(T_indices... indices) const
+          {
+            dest.getZB(indices...) = src.getZB(indices...); // Use the overloaded operator() to assign the value
+          }
+      };
+
+        template<typename T=void, int rank=0, arrayTags tag=arrayTags::host>
+            HOSTFLATTEN void trivialAssign(portableArray<T, rank, tag> dest, const portableArray<T, rank, tag> &src) {
+            if ((&dest) != (&src))
+            {
+                if (dest.getElements() != src.getElements()) {
+                throw std::runtime_error("Source and destination arrays must have the same number of elements.");
+                }
+                std_N_ary_tuple_type_t<Range,rank> ranges;
+                portableWrapper::detail::arrayToRangesZB(src, ranges);
+                auto tpl = std::tuple_cat(
+                    std::make_tuple(trivialAssignArray(dest, src)),
+                    ranges
+                    );
+                std::apply([](auto&&... args) {
+                    ::portableWrapper::openmp::applyKernel(args...);
+                }, tpl);
+            }
+            }
+
        template<typename T_data, int rankS, int rankD, arrayTags tagS, arrayTags tagD>
         HOSTUNREPEATED void copyData(portableArray<T_data, rankD, tagD> &destination, const portableArray<T_data, rankS, tagS> &source) {
             //Here in the OpenMP backend, given that we require that all types be trivially copyable,
             //we can just use memcpy to copy the data.
-            std::memcpy(destination.data(), source.data(), source.getElements() * sizeof(T_data));
+            if constexpr(std::is_trivially_copyable_v<T_data> && portableArray<T_data, rankD, tagD>::rowMajor() == portableArray<T_data, rankS, tagS>::rowMajor())
+            {
+                if (source.isContiguous() && destination.isContiguous()){
+                    std::memcpy(destination.data(), source.data(), source.getElements() * sizeof(T_data));
+                } else {
+                    trivialAssign(destination, source);
+                }
+            } else {
+                trivialAssign(destination, source);
+            }
         }
 
         /**

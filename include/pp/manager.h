@@ -585,6 +585,17 @@ namespace portableWrapper {
      
     }
 
+    /**
+     * Function to copy an array from Host to Host
+     * @param destination The destination portableArray where the data will be copied to. Must be allocated to be large enough to hold the source data.
+     * @param source The source portableArray from which the data will be copied.
+     */
+    template<typename T_data, int rank>
+    void copyDataHost(portableArray<T_data, rank, arrayTags::host> &destination, const portableArray<T_data, rank, arrayTags::host> &source)
+    {
+        openmp::copyData(destination, source);
+    }
+
     template<typename T_data, int rank, arrayTags tag>
     auto makeHostAvailable(const portableArray<T_data, rank, tag> &array)
     {

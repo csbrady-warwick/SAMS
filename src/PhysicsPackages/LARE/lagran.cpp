@@ -225,7 +225,7 @@ namespace LARE
             T_indexType i1 = ixm, j1 = iym, k1 = izm;
             T_indexType i2 = ix, j2 = iym, k2 = izm;
             T_indexType i0 = i1 - 1, j0 = j1, k0 = k1;
-            T_indexType i3 = i2 + 1, j3 = j1, k3 = k1;
+            T_indexType i3 = i2 + 1, j3 = j2, k3 = k2;
 
             T_dataType dx = data.dxb(ix);
             T_dataType dxp = data.dxb(ixp);
@@ -246,7 +246,7 @@ namespace LARE
         T_indexType i1 = ix, j1 = iym, k1 = izm;
         T_indexType i2 = ix, j2 = iy, k2 = izm;
         T_indexType i0 = i1, j0 = j1 - 1, k0 = k1;
-        T_indexType i3 = i2, j3 = j1 + 1, k3 = k1;
+        T_indexType i3 = i2, j3 = j2 + 1, k3 = k2;
 
         T_dataType dx = data.dyb(iy) * data.hy(ix);
         T_dataType dxp = data.dyb(iyp) * data.hy(ix);
@@ -265,7 +265,7 @@ namespace LARE
         T_indexType i1 = ix, j1 = iy, k1 = izm;
         T_indexType i2 = ix, j2 = iy, k2 = iz;
         T_indexType i0 = i1, j0 = j1, k0 = k1 - 1;
-        T_indexType i3 = i2, j3 = j1, k3 = k1 + 1;
+        T_indexType i3 = i2, j3 = j2, k3 = k2 + 1;
 
         T_dataType dx = data.dzb(iz) * data.hz(ix, iy);
         T_dataType dxp = data.dzb(izp) * data.hz(ix, iy);

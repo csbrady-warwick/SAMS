@@ -208,7 +208,6 @@ namespace examples
             pw::applyKernel(
                 LAMBDA(SAMS::T_indexType ix, SAMS::T_indexType iy, SAMS::T_indexType iz)
                 {
-									  std::cout << ix << " " << iy << " " << iz << " : " << xc(ix) << " " << yc(iy) << " " << zc(iz) << "\n";
                     using T_dataType = SAMS::T_dataType;
                     T_dataType dx = xc(ix)-0.5;
                     T_dataType dy = yc(iy)-0.5;
@@ -247,15 +246,12 @@ namespace examples
                         vy(ix,iy,iz) = 0.0;
                         vz(ix,iy,iz) = 0.0;
                     }
-                    vx(ix,iy,iz) = ix;
                     //Specific internal energy
                     energy_electron(ix, iy, iz) = pressure / ((data.gas_gamma - 1.0) * rho(ix, iy, iz))/2.0;
                     energy_ion(ix, iy, iz) = pressure / ((data.gas_gamma - 1.0) * rho(ix, iy, iz))/2.0;
 
                 },
                 rho.getRange(0), rho.getRange(1), rho.getRange(2));
-
-                std::cout << rho.getRange(0) << " " << rho.getRange(1) << " " << rho.getRange(2) << "\n";
         }
 
        /**

@@ -71,7 +71,6 @@ namespace portableWrapper
 		public:
 		DEVICEPREFIX INLINE static constexpr bool rowMajor()
 		{
-			return false;
 			if constexpr (tag == arrayTags::host)
 			{
 				return true; // Host arrays are row-major
@@ -211,6 +210,20 @@ namespace portableWrapper
 			return index;
 		}
 
+		/**
+		 * Get the last element index in the array
+		 */
+		DEVICEPREFIX size_t getLastElement() const
+		{
+			//Because we might be a slice we can't just use elements-1
+			size_t lastIndex = 0;
+			for (int i = 0; i < rank; ++i)
+			{
+				lastIndex += (upper_bound[i] - lower_bound[i]) * stride[i];
+			}
+			return lastIndex;
+		}
+
 		template<int level = 0>
 		DEVICEPREFIX void getUBTuple(portableWrapper::N_ary_tuple_type_t<SIGNED_INDEX_TYPE,rank> &tuple) const
 		{
@@ -298,6 +311,7 @@ namespace portableWrapper
 			if constexpr (level == 0)
 			{
 				calculateStrides<0>();
+				extent = getLastElement();
 			}
 		}
 
@@ -357,6 +371,8 @@ namespace portableWrapper
 			}
 		}
 
+
+
 		template <int dRank, typename... T_indices>
 		DEVICEPREFIX INLINE void sliceTo(portableArray<T, dRank, arrayTag> &other, T_indices... indices) const
 		{
@@ -372,6 +388,7 @@ namespace portableWrapper
 			other.managed = this->managed;			 // Copy the managed state
 			other.contiguous = false;				 // Can do better and check if it is a contiguous slice, but for the moment ...
 			other.offset = 0;
+			other.extent = other.getLastElement();
 		}
 
 		/**

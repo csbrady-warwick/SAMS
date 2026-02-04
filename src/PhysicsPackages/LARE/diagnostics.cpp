@@ -38,11 +38,11 @@ namespace LARE
         using Range = pw::Range;
         // Copy the data if needed
         auto fullHost = manager.makeHostAvailable(device);
+
         // Now allocate memory for just the part we want to write
         manager.allocate(host, Range(1, data.nx), Range(1, data.ny), Range(1, data.nz));
-        // This should DEFINITELY be in the backend somewhere, but for now just copy
-        pw::applyKernelHost(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) { host(ix, iy, iz) = fullHost(ix, iy, iz); }, Range(1, data.nx), Range(1, data.ny), Range(1, data.nz));
-        // manager.copyData(host, fullHost(Range(1,data.nx), Range(1,data.ny), Range(1,data.nz)));
+        //Have to copy data since the HDF writer expects contiguous data
+        manager.copyDataHost(host, fullHost(Range(1,data.nx), Range(1,data.ny), Range(1,data.nz)));
         manager.deallocate(fullHost);
     }
 

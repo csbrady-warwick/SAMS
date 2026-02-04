@@ -242,16 +242,74 @@ namespace portableWrapper{
             Kokkos::fence();
         }
 
+        /**Helper class to build an N level deep pointer */
+        template<typename T, int levels>
+        struct deepPointer {
+            using type = typename deepPointer<T, levels - 1>::type*;
+        };
+        template<typename T>
+        struct deepPointer<T, 0> {
+            using type = T;
+        };
+
+        template<int level=0,typename T, int rank, arrayTags tag>
+         auto autobuildLayoutStrideTuple(const portableArray<T, rank, tag> &array) {
+            if constexpr (level<rank-1){
+                return std::tuple_cat(
+                    std::make_tuple(array.getSize(level), array.getStride(level)),
+                    autobuildLayoutStrideTuple<level+1,T,rank,tag>(array)
+                );
+            } else {
+                return std::make_tuple(array.getSize(level), array.getStride(level));
+            }
+         }
+
+        /**
+         * Function to convert a portableArray to a Kokkos View
+         */
+        template<typename T, int rank, arrayTags tag>
+        UNREPEATED auto toView(portableArray<T, rank, tag>& portableArray) {
+            //Create a layout stride tuple
+            auto layoutStrideTuple = autobuildLayoutStrideTuple(portableArray);
+            Kokkos::LayoutStride stride = std::apply([](auto&&... args){
+                return Kokkos::LayoutStride(args...);
+            }, layoutStrideTuple);
+            using kokkosSpace = std::conditional_t<tag == arrayTags::host, Kokkos::HostSpace, KOKKOS_EXECUTION_SPACE::memory_space>;
+            using viewType = Kokkos::View<typename deepPointer<T, rank>::type, Kokkos::LayoutStride, kokkosSpace>;
+            return viewType(portableArray.data(), stride);
+        }
+
+        /**
+         * Function to convert a portableArray to a Kokkos View(const version)
+         */
+        template<typename T, int rank, arrayTags tag>
+        UNREPEATED auto toView(const portableArray<T, rank, tag>& portableArray) {
+            //Create a layout stride tuple
+            auto layoutStrideTuple = autobuildLayoutStrideTuple(portableArray);
+            Kokkos::LayoutStride stride = std::apply([](auto&&... args){
+                return Kokkos::LayoutStride(args...);
+            }, layoutStrideTuple);
+            using kokkosSpace = std::conditional_t<tag == arrayTags::host, Kokkos::HostSpace, KOKKOS_EXECUTION_SPACE::memory_space>;
+            using viewType = Kokkos::View<typename deepPointer<T, rank>::type, Kokkos::LayoutStride, kokkosSpace>;
+            return viewType(portableArray.data(), stride);
+        }
+
+
         template<typename T_data, int rankS, int rankD, arrayTags tagS, arrayTags tagD>
         UNREPEATED void copyData(portableArray<T_data, rankD, tagD> &destination, const portableArray<T_data, rankS, tagS> &source) {
 
-            using kokkosSource = std::conditional_t<tagS == arrayTags::host, Kokkos::HostSpace, KOKKOS_EXECUTION_SPACE::memory_space>;
-            using kokkosDestination = std::conditional_t<tagD == arrayTags::host, Kokkos::HostSpace, KOKKOS_EXECUTION_SPACE::memory_space>;
-            
-            Kokkos::View<const T_data*, kokkosSource> sourceView(source.data(), source.getElements());
-            Kokkos::View<T_data*, kokkosDestination> destinationView(destination.data(), destination.getElements());
-            Kokkos::deep_copy(destinationView, sourceView);
-            
+            //If the tags are the same then deepcopy will work
+            if constexpr (tagS == tagD){
+                auto sourceView = kokkos::toView(source);
+                auto destinationView = kokkos::toView(destination);
+                Kokkos::deep_copy(destinationView, sourceView);
+            } else {
+                auto sourceView = kokkos::toView(source);
+                auto hostSrc = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), sourceView);
+                auto destinationView = kokkos::toView(destination);
+                Kokkos::deep_copy(destinationView, hostSrc);
+                //Different tags, need to do a manual copy
+            }
         }
 
         /**
@@ -265,30 +323,6 @@ namespace portableWrapper{
             auto exec_space = KOKKOS_EXECUTION_SPACE();
             SAMS::cout << "Kokkos execution space: " << exec_space.name() << std::endl;
             SAMS::cout << "Kokkos concurrency: " << exec_space.concurrency() << std::endl;
-        }
-
-        /**Helper class to build an N level deep pointer */
-        template<typename T, int levels>
-        struct deepPointer {
-            using type = typename deepPointer<T, levels - 1>::type*;
-        };
-        template<typename T>
-        struct deepPointer<T, 0> {
-            using type = T;
-        };
-
-        /**
-         * Function to convert a portableArray to a Kokkos View
-         */
-        template<typename T, int rank, arrayTags tag>
-        UNREPEATED auto toView(portableArray<T, rank, tag>& portableArray) {
-            using kokkosSpace = std::conditional_t<tag == arrayTags::host, Kokkos::HostSpace, KOKKOS_EXECUTION_SPACE::memory_space>;
-            using viewType = Kokkos::View<typename deepPointer<T, rank>::type, kokkosSpace>;
-            Kokkos::Array<SIGNED_INDEX_TYPE, rank> dims;
-            for (int i = 0; i < rank; ++i) {
-                dims[i] = portableArray.size[i];
-            }
-            return viewType(portableArray.data(), dims);
         }
 
 
