@@ -18,6 +18,8 @@
 #include "MHDRotor.h"
 #include "OrszagTang.h"
 #include "OrszagTang3D.h"
+#include "EmeryWindTunnel.h"
+#include "KarmanVortex.h"
 
 #include "builtInBoundaryConditions.h"
 
@@ -33,8 +35,10 @@ int main(int argc, char *argv[]){
 
     //Print welcome message
     SAMS::printWelcomeMessage();
-    //Createa and initialize the runner
-    SAMS::runner<LARE::LARE3D, LARE::LARE3DInitialConditions, examples::SodShockTube, examples::BrioAndWu, examples::MHDRotor, examples::OrszagTang, examples::OrszagTang3D> runner;
+
+    //Create and initialize the runner
+    SAMS::runner<LARE::LARE3D, LARE::LARE3DInitialConditions, examples::SodShockTube, examples::BrioAndWu, examples::MHDRotor, examples::OrszagTang, examples::OrszagTang3D, examples::EmeryWindTunnel, 
+        examples::KarmanVortex> runner;
     runner.initialize(argc, argv);
     //Finish welcome message
     SAMS::finishWelcomeMessage();

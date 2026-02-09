@@ -136,7 +136,7 @@ class writer {
 	DEFAULTVALUE(registerOrder, meshDataOrder, meshDataOrder::noOrder);
 	//Do you have to write the mesh before the data, vice versa, or does it not matter
 	DEFAULTVALUE(writeOrder, meshDataOrder, meshDataOrder::noOrder);
-	constexpr static size_t maximumRank = 3;
+	constexpr static size_t maximumRank = 8;
 	//Does the writer support key-value pairs globally
 	DEFAULTVALUE(supportsKeyValue, bool, false);
 	//Does the writer support setting the key-value pairs for a specific mesh

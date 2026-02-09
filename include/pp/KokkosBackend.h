@@ -308,7 +308,6 @@ namespace portableWrapper{
                 auto hostSrc = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), sourceView);
                 auto destinationView = kokkos::toView(destination);
                 Kokkos::deep_copy(destinationView, hostSrc);
-                //Different tags, need to do a manual copy
             }
         }
 

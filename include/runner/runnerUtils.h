@@ -7,6 +7,14 @@
 #include "pp/callableTraits.h"
 
 namespace SAMS{
+
+        namespace dataPacks{
+        template <typename... dataPacks>
+        struct multiPack{
+            using type = std::tuple<dataPacks...>;
+        };
+    }
+
     /**
      * Helper class to find out if a class has a member variable called dataPack. If so get it's type. If not return void.
      */
@@ -66,6 +74,15 @@ namespace SAMS{
      */
     template<typename... T, typename... Rest>
     struct uniqueTuple<std::tuple<T...>, Rest...> {
+        static_assert(portableWrapper::alwaysFalse<T...>::value, "Error: Unpacking a tuple directly into uniqueTuple is not allowed. Use dataPacks::multiPack to wrap the tuple instead.");
+        using type = typename uniqueTuple<T..., Rest...>::type;
+    };
+
+    /**
+     * Specialisation to unpack dataPacks::multiPack and process its types into the uniqueTuple
+     */
+    template<typename... T, typename... Rest>
+    struct uniqueTuple<dataPacks::multiPack<T...>, Rest...> {
         using type = typename uniqueTuple<T..., Rest...>::type;
     };
 
@@ -123,7 +140,7 @@ namespace SAMS{
         static constexpr int64_t value = []() {
             if constexpr (level >= std::tuple_size_v<T_tuple>) {
                 return -1; // Not found
-            } else if constexpr (std::is_same_v<T, std::tuple_element_t<level, T_tuple>>) {
+            } else if constexpr (std::is_same_v<std::remove_cvref_t<T>, std::remove_cvref_t<std::tuple_element_t<level, T_tuple>>>) {
                 return level;
             } else {
                 return tupleTypeIndex<T, T_tuple, level + 1>::value;
@@ -166,15 +183,15 @@ namespace SAMS{
     template<typename T, typename T_src, typename... T_others>
     decltype(auto) getItemFromTuple(T_src& src, T_others&&... others)
     {
-        using Tvalue = std::remove_reference_t<T>;
+        using Tvalue = std::remove_const_t<std::remove_reference_t<T>>;
         using Tref = std::add_lvalue_reference_t<Tvalue>;
 
         constexpr int64_t indexref = tupleTypeIndex_v<Tref, T_src>;
         constexpr int64_t indexvalue = tupleTypeIndex_v<Tvalue, T_src>;
         if constexpr (indexref >= 0){
-            return std::get<Tref>(src);
+            return std::get<static_cast<std::size_t>(indexref)>(src);
         } else if constexpr (indexvalue >= 0){
-            return std::get<Tvalue>(src);
+            return std::get<static_cast<std::size_t>(indexvalue)>(src);
         } else {
             if constexpr (sizeof...(T_others) > 0){
                 return getItemFromTuple<T>(std::forward<T_others>(others)...);
@@ -238,12 +255,17 @@ namespace SAMS{
 
     template<typename... T1s, typename... T2s, typename... Rest>
     struct tupleUnion<std::tuple<T1s...>, std::tuple<T2s...>, Rest...> {
-        using type = typename tupleUnion<uniqueTuple_t<std::tuple<T1s..., T2s...>>, Rest...>::type;
+        using type = typename tupleUnion<uniqueTuple_t<T1s..., T2s...>, Rest...>::type;
     };
 
     template<typename... T1s, typename... T2s>
     struct tupleUnion<std::tuple<T1s...>, std::tuple<T2s...>> {
-        using type = uniqueTuple_t<std::tuple<T1s..., T2s...>>;
+        using type = uniqueTuple_t<T1s..., T2s...>;
+    };
+
+    template<typename... T1s>
+    struct tupleUnion<std::tuple<T1s...>> {
+        using type = uniqueTuple_t<T1s...>;
     };
 
     template<typename... T>

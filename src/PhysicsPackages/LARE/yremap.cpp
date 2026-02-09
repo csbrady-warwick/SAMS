@@ -244,7 +244,7 @@ namespace LARE
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
                 T_indexType iym = iy - 1;
-                remap_data.rho_v1(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.cv1(ix, iy, iz) + data.dm(ix, iym, iz) - data.dm(ix, iy, iz)) /
+                remap_data.rho_v1(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * remap_data.cvc1(ix, iy, iz) + data.dm(ix, iym, iz) - data.dm(ix, iy, iz)) /
                                                 remap_data.cv2(ix, iy, iz);
             },
             Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
@@ -254,7 +254,7 @@ namespace LARE
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
                 T_indexType iym = iy - 1;
-                data.vx(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vx(ix, iy, iz) * data.cv1(ix, iy, iz) +
+                data.vx(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vx(ix, iy, iz) * remap_data.cvc1(ix, iy, iz) +
                                        remap_data.flux(ix, iym, iz) - remap_data.flux(ix, iy, iz)) /
                                       (remap_data.cv2(ix, iy, iz) * remap_data.rho_v1(ix, iy, iz));
             },
@@ -265,7 +265,7 @@ namespace LARE
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
                 T_indexType iym = iy - 1;
-                data.vy(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vy(ix, iy, iz) * data.cv1(ix, iy, iz) +
+                data.vy(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vy(ix, iy, iz) * remap_data.cvc1(ix, iy, iz) +
                                        remap_data.flux(ix, iym, iz) - remap_data.flux(ix, iy, iz)) /
                                       (remap_data.cv2(ix, iy, iz) * remap_data.rho_v1(ix, iy, iz));
             },
@@ -276,7 +276,7 @@ namespace LARE
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
                 T_indexType iym = iy - 1;
-                data.vz(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vz(ix, iy, iz) * data.cv1(ix, iy, iz) +
+                data.vz(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vz(ix, iy, iz) * remap_data.cvc1(ix, iy, iz) +
                                        remap_data.flux(ix, iym, iz) - remap_data.flux(ix, iy, iz)) /
                                       (remap_data.cv2(ix, iy, iz) * remap_data.rho_v1(ix, iy, iz));
             },

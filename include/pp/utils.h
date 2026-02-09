@@ -29,7 +29,7 @@ namespace portableWrapper
    * Helper struct to trigger static_assert false in templated code
    * when a particular template instantiation is not supported.
    */
-  template<typename T>
+  template<typename... T>
   struct alwaysFalse : std::false_type {};
 
 namespace{

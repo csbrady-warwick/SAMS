@@ -92,6 +92,23 @@ namespace LARE
         data.ybLocalRange = axRegistry.getLocalRange("Y", SAMS::staggerType::HALF_CELL);
         data.zbLocalRange = axRegistry.getLocalRange("Z", SAMS::staggerType::HALF_CELL);
 
+        // Get the ranges for the ghost cells for centred axes
+        data.xcminBCRange = axRegistry.getLocalNonDomainRange("X", SAMS::staggerType::CENTRED, SAMS::domain::edges::lower );
+        data.xcmaxBCRange = axRegistry.getLocalNonDomainRange("X", SAMS::staggerType::CENTRED, SAMS::domain::edges::upper);
+        data.ycminBCRange = axRegistry.getLocalNonDomainRange("Y", SAMS::staggerType::CENTRED, SAMS::domain::edges::lower);
+        data.ycmaxBCRange = axRegistry.getLocalNonDomainRange("Y", SAMS::staggerType::CENTRED, SAMS::domain::edges::upper);
+        data.zcminBCRange = axRegistry.getLocalNonDomainRange("Z", SAMS::staggerType::CENTRED, SAMS::domain::edges::lower);
+        data.zcmaxBCRange = axRegistry.getLocalNonDomainRange("Z", SAMS::staggerType::CENTRED, SAMS::domain::edges::upper);
+
+        // Get the ranges for the ghost cells for half cell staggered axes
+        data.xbminBCRange = axRegistry.getLocalNonDomainRange("X", SAMS::staggerType::HALF_CELL, SAMS::domain::edges::lower);
+        data.xbmaxBCRange = axRegistry.getLocalNonDomainRange("X", SAMS::staggerType::HALF_CELL, SAMS::domain::edges::upper);
+        data.ybminBCRange = axRegistry.getLocalNonDomainRange("Y", SAMS::staggerType::HALF_CELL, SAMS::domain::edges::lower);
+        data.ybmaxBCRange = axRegistry.getLocalNonDomainRange("Y", SAMS::staggerType::HALF_CELL, SAMS::domain::edges::upper);
+        data.zbminBCRange = axRegistry.getLocalNonDomainRange("Z", SAMS::staggerType::HALF_CELL, SAMS::domain::edges::lower);
+        data.zbmaxBCRange = axRegistry.getLocalNonDomainRange("Z", SAMS::staggerType::HALF_CELL, SAMS::domain::edges::upper);
+
+
         // Get the ranges for the actual domain (no ghost cells)
         data.xcLocalDomainRange = axRegistry.getLocalDomainRange("X", SAMS::staggerType::CENTRED);
         data.ycLocalDomainRange = axRegistry.getLocalDomainRange("Y", SAMS::staggerType::CENTRED);
@@ -103,6 +120,10 @@ namespace LARE
         data.nx = nx;
         data.ny = ny;
         data.nz = nz;
+
+        data.nx_global = axRegistry.getDimension("X").getGlobalDomainCount(SAMS::staggerType::CENTRED);
+        data.ny_global = axRegistry.getDimension("Y").getGlobalDomainCount(SAMS::staggerType::CENTRED);
+        data.nz_global = axRegistry.getDimension("Z").getGlobalDomainCount(SAMS::staggerType::CENTRED);
 
         using Range = pw::Range;
         // Grab the final variable sizes from the registry and wrap the arrays

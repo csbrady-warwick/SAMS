@@ -195,6 +195,8 @@ target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/src/InitialConditio
 target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/src/InitialConditions/MHDRotor")
 target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/src/InitialConditions/OrszagTang")
 target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/src/InitialConditions/OrszagTang3D")
+target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/src/InitialConditions/EmeryWindTunnel")
+target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/src/InitialConditions/KarmanVortex")
 target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/include/harness")
 target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/include/runner")
 target_include_directories(sams PRIVATE "${CMAKE_SOURCE_DIR}/include/boundaryConditions")

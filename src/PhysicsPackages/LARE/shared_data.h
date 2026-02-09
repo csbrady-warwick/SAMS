@@ -75,6 +75,20 @@ namespace LARE
         pw::Range zbLocalRange;
         pw::Range zbLocalDomainRange;
 
+        pw::Range xcminBCRange;
+        pw::Range xcmaxBCRange;
+        pw::Range ycminBCRange;
+        pw::Range ycmaxBCRange;
+        pw::Range zcminBCRange;
+        pw::Range zcmaxBCRange;
+
+        pw::Range xbminBCRange;
+        pw::Range xbmaxBCRange;
+        pw::Range ybminBCRange;
+        pw::Range ybmaxBCRange;
+        pw::Range zbminBCRange;
+        pw::Range zbmaxBCRange;
+
         T_dataType none_zero = std::numeric_limits<T_dataType>::epsilon();  // Smallest non-zero value for T_dataTyp
         T_dataType largest_number = std::numeric_limits<T_dataType>::max(); // Largest number for T_dataType
 
@@ -87,6 +101,7 @@ namespace LARE
 
         // Domain parameters
         T_indexType nx, ny, nz; // Could be unsigned but when comparing signed and unsigned, unsigned wins
+        T_indexType nx_global, ny_global, nz_global;
         T_dataType x_min, x_max, length_x, dx;
         T_dataType y_min, y_max, length_y, dy;
         T_dataType z_min, z_max, length_z, dz;
@@ -327,7 +342,8 @@ namespace LARE
         /**
          * Lare's dataPack is simulationData and remapData
          */
-        using dataPack = std::tuple<simulationData, remapData>;
+        using dataPack = SAMS::dataPacks::multiPack<simulationData, remapData>;
+        //using dataPack = std::tuple<simulationData, remapData>;
 
 
         /**
@@ -424,10 +440,16 @@ namespace LARE
         }
 
         template<typename T>
-        void registerOutput(writer<T> &writer, simulationData &data);
+        void registerOutputMeshes(writer<T> &writer, simulationData &data);
 
         template<typename T>
-        void writeOutput(writer<T> &writer, simulationData &data);
+        void registerOutputVariables(writer<T> &writer, simulationData &data);
+
+        template<typename T>
+        void writeOutputMeshes(writer<T> &writer, simulationData &data);
+
+        template<typename T>
+        void writeOutputVariables(writer<T> &writer, simulationData &data);
 
         /**
          * Allocate the LARE3D data arrays
@@ -483,11 +505,6 @@ namespace LARE
          * Function to add back the kinetic energy correction
          */
         void energy_correction(simulationData &data);
-
-        /**
-         * Function to output data to disk
-         */
-        void output(simulationData &data);
     };
 }
 

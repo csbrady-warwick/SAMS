@@ -217,7 +217,7 @@ namespace LARE
         pw::applyKernel(
             LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
                 T_indexType izm = iz - 1;
-                remap_data.rho_v1(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.cv1(ix, iy, iz) + data.dm(ix, iy, izm) - data.dm(ix, iy, iz)) /remap_data.cv2(ix, iy, iz);
+                remap_data.rho_v1(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * remap_data.cvc1(ix, iy, iz) + data.dm(ix, iy, izm) - data.dm(ix, iy, iz)) /remap_data.cv2(ix, iy, iz);
             },
             Range(0, data.nx), Range(0, data.ny), Range(-1, data.nz+1));
         pw::fence();
@@ -225,19 +225,19 @@ namespace LARE
         z_mom_flux<&simulationData::vx>(data, remap_data);
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
         T_indexType izm = iz - 1;
-        data.vx(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vx(ix, iy, iz) * data.cv1(ix, iy, iz) + remap_data.flux(ix, iy, izm) - remap_data.flux(ix, iy, iz)) / (remap_data.cv2(ix, iy, iz) * remap_data.rho_v1(ix, iy, iz)); }, Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
+        data.vx(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vx(ix, iy, iz) * remap_data.cvc1(ix, iy, iz) + remap_data.flux(ix, iy, izm) - remap_data.flux(ix, iy, iz)) / (remap_data.cv2(ix, iy, iz) * remap_data.rho_v1(ix, iy, iz)); }, Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
 
         z_mom_flux<&simulationData::vy>(data, remap_data);
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
         T_indexType izm = iz - 1;
-        data.vy(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vy(ix, iy, iz) * data.cv1(ix, iy, iz) + remap_data.flux(ix, iy, izm) - remap_data.flux(ix, iy, iz)) / (remap_data.cv2(ix, iy, iz) * remap_data.rho_v1(ix, iy, iz)); }, Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
+        data.vy(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vy(ix, iy, iz) * remap_data.cvc1(ix, iy, iz) + remap_data.flux(ix, iy, izm) - remap_data.flux(ix, iy, iz)) / (remap_data.cv2(ix, iy, iz) * remap_data.rho_v1(ix, iy, iz)); }, Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
 
         z_mom_flux<&simulationData::vz>(data, remap_data);
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
         T_indexType izm = iz -1;
-        data.vz(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vz(ix, iy, iz) * data.cv1(ix, iy, iz) + remap_data.flux(ix, iy, izm) - remap_data.flux(ix, iy, iz)) / (remap_data.cv2(ix, iy, iz) * remap_data.rho_v1(ix, iy, iz)); }, Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
+        data.vz(ix, iy, iz) = (remap_data.rho_v(ix, iy, iz) * data.vz(ix, iy, iz) * remap_data.cvc1(ix, iy, iz) + remap_data.flux(ix, iy, izm) - remap_data.flux(ix, iy, iz)) / (remap_data.cv2(ix, iy, iz) * remap_data.rho_v1(ix, iy, iz)); }, Range(0, data.nx), Range(0, data.ny), Range(0, data.nz));
         pw::fence();
 
         this->boundary_conditions();

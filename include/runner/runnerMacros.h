@@ -153,7 +153,7 @@ public: \
         HAS_X(X) \
         TIMER_X(X) \
         public: \
-        template<bool ifActive = true, bool recursive = true, int level = 0, typename... T_spec, typename... T>\
+        template<bool handleExceptions = false, bool ifActive = true, bool recursive = true, int level = 0, typename... T_spec, typename... T>\
         auto callCore_##X(T&&... args){\
             if constexpr(hasMethod_##X<level, T_spec...>::value){\
                 using rtype = typename hasMethod_##X<level, T_spec...>::params; \
@@ -165,20 +165,39 @@ public: \
                         std::forward_as_tuple(std::forward<T>(args)...), \
                         getCallTupleElements<outerParams>(runnerData) \
                     ); \
-                    if constexpr(sizeof...(T_spec)>0){\
-                        std::apply([&](auto&&... cargs) {\
-                            std::get<level>(runnerData).template X<T_spec...>(std::forward<decltype(cargs)>(cargs)...);\
-                        }, cTuple);\
+                    if constexpr(handleExceptions){\
+                        try {\
+                            if constexpr(sizeof...(T_spec)>0){\
+                                std::apply([&](auto&&... cargs) {\
+                                    std::get<level>(runnerData).template X<T_spec...>(std::forward<decltype(cargs)>(cargs)...);\
+                                }, cTuple);\
+                            } else {\
+                                std::apply([&](auto&&... cargs) {\
+                                    std::get<level>(runnerData).X(std::forward<decltype(cargs)>(cargs)...);\
+                                }, cTuple);\
+                            }\
+                        } catch (const std::exception& e) {\
+                            std::string name = static_cast<std::string>(hasParamType_name<std::tuple_element_t<level, T_combined>>::value); \
+                            std::stringstream ss;\
+                            ss << "Error in simulation " << name << " (level " << level << ") during call to " << TOSTRING(X) << ": " << e.what() << std::endl;\
+                            abort(ss.str(), false);\
+                        }\
                     } else {\
-                        std::apply([&](auto&&... cargs) {\
-                            std::get<level>(runnerData).X(std::forward<decltype(cargs)>(cargs)...);\
-                        }, cTuple);\
+                        if constexpr(sizeof...(T_spec)>0){\
+                            std::apply([&](auto&&... cargs) {\
+                                std::get<level>(runnerData).template X<T_spec...>(std::forward<decltype(cargs)>(cargs)...);\
+                            }, cTuple);\
+                        } else {\
+                            std::apply([&](auto&&... cargs) {\
+                                std::get<level>(runnerData).X(std::forward<decltype(cargs)>(cargs)...);\
+                            }, cTuple);\
+                        }\
                     }\
                     toggleTimer_##X<level>();\
                 } \
             }\
             if constexpr (recursive && level < sizeof...(Packages)-1){\
-                callCore_##X<ifActive, recursive, (level+1), T_spec...>(std::forward<T>(args)...);\
+                callCore_##X<handleExceptions,ifActive, recursive, (level+1), T_spec...>(std::forward<T>(args)...);\
             }\
         }
 
@@ -187,7 +206,14 @@ public: \
         CALL_X(X) \
         template<typename... T_spec, typename... T> \
         void X(T&&... args){\
-            callCore_##X<true,true,0,T_spec...>(std::forward<T>(args)...);\
+            callCore_##X<false,true,true,0,T_spec...>(std::forward<T>(args)...);\
+        }
+
+    #define FULL_CALL_X_WITH_EXCEPTIONS(X) \
+        CALL_X(X) \
+        template<typename... T_spec, typename... T> \
+        void X##_with_exceptions(T&&... args){\
+            callCore_##X<true,true,true,0,T_spec...>(std::forward<T>(args)...);\
         }
 
 #endif // SAMS_RUNNERMACROS_H

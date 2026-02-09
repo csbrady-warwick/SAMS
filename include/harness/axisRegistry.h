@@ -1151,6 +1151,18 @@ namespace SAMS
         }
 
 
+        /**
+         * Get the local non domain(i.e. ghost cell) range for a given axis
+         * @param name The name of the axis
+         * @param stagger The staggering type
+         * @return The local non domain range
+         */
+        portableWrapper::Range getLocalNonDomainRange(const std::string &name, staggerType stagger, SAMS::domain::edges edge)
+        {
+            auto &ax = getAxis(name);
+            return ax.dim.getLocalNonDomainRange(stagger, edge);
+        }
+
 
         /**
          * Get a portable array wrapping the axis data

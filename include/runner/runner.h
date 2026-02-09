@@ -37,10 +37,19 @@ namespace SAMS
         friend class runner;
         void* object;
         void(*calculateTimestepFn)(void*)=nullptr;
-        void bind(void* obj,
-                      void(*calculateTimestepFunc)(void*)){
+        bool(*isActiveFn)(void*, const std::string &name)=nullptr;
+        void(*activateFn)(void*, const std::string &name)=nullptr;
+        void bind(void* obj){
             object = obj;
+        }
+        void bindCalculateTimestep(void(*calculateTimestepFunc)(void*)){
             calculateTimestepFn = calculateTimestepFunc;
+        }
+        void bindIsActive(bool(*isActiveFunc)(void*, const std::string &name)){
+            isActiveFn = isActiveFunc;
+        }
+        void bindActivate(void(*activateFunc)(void*, const std::string &name)){
+            activateFn = activateFunc;
         }
     public:
     /**
@@ -49,8 +58,21 @@ namespace SAMS
         void calculateTimestep(){
             calculateTimestepFn(object);
         }
-    };
 
+    /**
+     * Query whether a package is active on the runner by name
+     */
+        bool isPackageActive(const std::string& name){
+            return isActiveFn(object, name);
+        }
+
+    /**
+     * Activate a package on the runner by name
+     */        
+        void activatePackage(const std::string& name){
+            activateFn(object, name);
+        }
+    };
     
     /**
      * Runner class that runs a set of simulations
@@ -83,14 +105,7 @@ namespace SAMS
         std::vector<std::string> outputVariables;
         std::map<std::string, std::vector<std::string>> outputSets;
 
-        CALL_X(activateOthers); //Activate other simulations NOTE! This is intended for tests rather than normal use
-        void activateOthers(){
-            std::vector<std::string> toActivate;
-            callCore_activateOthers(toActivate);
-            for (const auto& name : toActivate){
-                activatePackage(name);
-            }
-        }
+        FULL_CALL_X(runnerInteraction); //The one chance that a simulation has to interact directly with the runner.
 
         /**
          * @fn void callCore_initialize()
@@ -100,6 +115,7 @@ namespace SAMS
          */
         CALL_X(initialize);//Initialize packages
 
+        FULL_CALL_X(checkActivation); //Report whether this package can validly be activated
         /**
          * @fn void callCore_registerDeckElements()
          * Core function to register deck elements for all packages
@@ -150,8 +166,6 @@ namespace SAMS
             #endif
             //Allow the simulations to gather the updated timestep
             callCore_getTimestep();
-            tData.step++;
-            tData.time += tData.dt;
         }
 
         CALL_X(queryTerminate); //Query whether to terminate the simulation
@@ -180,16 +194,28 @@ namespace SAMS
             return outputNow;
         }
 
-        CALL_X(registerOutput); //Register output variables
+        CALL_X(registerOutputMeshes); //Register meshes
         template<typename T>
-        void registerOutput(writer<T>& w){
-            callCore_registerOutput<true,true,0,T>(w);
+        void registerOutputMeshes(writer<T>& w){
+            callCore_registerOutputMeshes<false, true,true,0,T>(w);
         }
 
-        CALL_X(writeOutput); //Write output
+        CALL_X(registerOutputVariables); //Register variables
         template<typename T>
-        void writeOutput(writer<T>& w){
-            callCore_writeOutput<true,true,0,T>(w);
+        void registerOutputVariables(writer<T>& w){
+            callCore_registerOutputVariables<false, true,true,0,T>(w);
+        } 
+
+        CALL_X(writeOutputMeshes); //Write output
+        template<typename T>
+        void writeOutputMeshes(writer<T>& w){
+            callCore_writeOutputMeshes<false,true,true,0,T>(w);
+        }
+
+        CALL_X(writeOutputVariables); //Write variables
+        template<typename T>
+        void writeOutputVariables(writer<T>& w){
+            callCore_writeOutputVariables<false,true,true,0,T>(w);
         }
 
         FULL_CALL_X(steer); //Computational steering
@@ -295,6 +321,29 @@ namespace SAMS
             r->calculateTimestep();
         }
 
+        /**
+         * Static function to call isPackageActive on a runner instance
+         * Used in type-erased control function binding
+         * @param obj Pointer to the runner instance
+         * @param name Name of the package to query
+         * @return Whether the package is active
+         */
+        bool static callIsPackageActive(void* obj, const std::string& name){
+            runner* r = static_cast<runner*>(obj);
+            return r->isPackageActive(name);
+        }
+
+        /**
+         * Static function to call activatePackage on a runner instance
+         * Used in type-erased control function binding
+         * @param obj Pointer to the runner instance
+         * @param name Name of the package to activate
+         */
+        static void callActivatePackage(void* obj, const std::string& name){
+            runner* r = static_cast<runner*>(obj);
+            r->activatePackage(name);
+        }
+
         public:
 
         /**
@@ -393,6 +442,17 @@ namespace SAMS
             }
         }
 
+        bool isPackageActive(const std::string& simName){
+            auto it = simulationInfoMap.find(simName);
+            if (it != simulationInfoMap.end()){
+                return simulationActiveFlags[it->second.level];
+            } else {
+                std::stringstream ss;
+                ss << "ERROR: Package with name " << simName << " not found in runner.\n";
+                throw std::runtime_error(ss.str());
+            }
+        }
+
         void decomposeAndAllocate()
         {
             harness& h = getHarness();
@@ -456,8 +516,10 @@ namespace SAMS
 
             std::string Name = "diagnostics_" + ss.str();
             writer.openFile(Name.c_str());
-            registerOutput(writer);
-            writeOutput(writer);
+            registerOutputMeshes(writer);
+            registerOutputVariables(writer);
+            writeOutputMeshes(writer);
+            writeOutputVariables(writer);
             writer.closeFile();
             outputCount++;
         }
@@ -474,15 +536,17 @@ namespace SAMS
             getHarness().MPIManager.autoDecomposition({false,false,false});
             //Bind the control functions
             auto& ctrlFuncs = SAMS::getItemFromTuple<controlFunctions>(runnerData);
-            ctrlFuncs.bind(this, &runner::callCalculateTimestep);
+            ctrlFuncs.bind(this);
+            ctrlFuncs.bindCalculateTimestep(&runner::callCalculateTimestep);
+            ctrlFuncs.bindIsActive(&runner::callIsPackageActive);
+            ctrlFuncs.bindActivate(&runner::callActivatePackage);
             //Turn off all simulations
             std::fill(simulationActiveFlags.begin(), simulationActiveFlags.end(), false);
             buildInfo();
-            //Tell packages to activate other packages if needed            
-            activateOthers();
         }
 
         void initializePackages(){
+            runnerInteraction<runner>(*this); //Allow user to interact with the runner before initialization (e.g. to activate simulations)
             pkgInit(); //Initialize active packages
             registerAxes(); //Tell packages to register axes
             registerVariables(); //Tell packages to register variables (using axes)
@@ -491,9 +555,9 @@ namespace SAMS
             setDomain(); //Set the domain for simulations
             decomposeAndAllocate(); //MPI decompose and allocate variables
             getVariables(); //Get the actual memory for variables
-            setBoundaryConditions(); //Attach boundary conditions
             defaultVariables(); //Set default variable values
             initialConditions(); //Set initial conditions
+            setBoundaryConditions(); //Attach boundary conditions
             writeOutput(); //Write initial output
         }
 
@@ -505,6 +569,9 @@ namespace SAMS
                 }
                 startOfTimestep(); //Start of timestep (predictor)
                 halfTimestep(); //Half timestep (correction)
+                auto& tData = std::get<timeState>(runnerData);
+                tData.step++;
+                tData.time += tData.dt;
                 endOfTimestep(); //End of timestep (remap for LARE3D)
                 if (queryOutput()){
                     writeOutput(); //If ANY package says to output, do so

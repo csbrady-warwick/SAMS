@@ -75,7 +75,6 @@ namespace SAMS
         {
             int edgeIndex = (edge == SAMS::domain::edges::lower) ? 0 : 1;
             auto &ranges = this->boundaryRanges[dimension * 2 + edgeIndex];
-            auto &var = this->variable;
             portableWrapper::portableArray<T, rank, tag> slice = std::apply([this](auto... rangeArgs){
                 return this->variable(rangeArgs...);
             }, ranges);
@@ -166,6 +165,83 @@ namespace SAMS
                 firstGhostPoint = dimInfo.getLocalNonDomainLB(SAMS::domain::edges::upper);
             }
             mirrorHelper<T, rank, tag> helper(var, dimension, lastDomainPoint, firstGhostPoint);
+            std::apply([&helper](auto... params){
+                portableWrapper::applyKernel(helper, params...);
+            }, ranges);
+        }
+    };
+
+
+   /**
+     * Helper functor to perform zero gradient boundary conditions
+     * @tparam T The data type of the variable
+     * @tparam rank The rank of the variable
+     * @tparam tag The memory space of the variable
+     */
+    template<typename T, int rank, portableWrapper::arrayTags tag = portableWrapper::arrayTags::accelerated>
+    class zeroGradientHelper 
+    {
+        private:
+            portableWrapper::portableArray<T, rank, tag> Array;
+            int dim;
+            T_indexType lastDomainPoint, firstGhostPoint;
+            T mirrorValue;
+        public:
+
+        /**
+         * Constructor
+         * @param Array The array to apply the mirror boundary condition to
+         * @param dim The dimension to apply the boundary condition on
+         * @param lastDomainPoint The last point in the domain (to mirror from)
+         * @note This implements mirroring around the value on the boundary itself (this either uses the last domain point for half cell stagger or averages the last two domain points for cell centered stagger)
+         */
+        zeroGradientHelper(portableWrapper::portableArray<T, rank, tag> &Array, int dim, T_indexType lastDomainPoint)
+            : Array(Array), dim(dim), lastDomainPoint(lastDomainPoint)
+        {
+        }
+
+        template<typename... Params>
+        FUNCTORMETHODPREFIX void operator()(Params... params) const {
+
+            TUPLE<Params...> dst(params...), src(params...);
+
+            //Zero gradient: just copy the last domain value to the ghost cells
+
+            //Now find your distance from the boundary and mirror the value around it
+            portableWrapper::getTupleElement(src, dim) = lastDomainPoint;
+            APPLY(Array, dst) = APPLY(Array, src);
+        }
+    };
+
+    /**
+     * A simple zero gradient boundary condition that reflects the variable at the boundary.
+     * @tparam T The data type of the variable
+     * @tparam rank The rank of the variable
+     * @tparam tag The memory space of the variable
+     * @note uses the mirrorHelper functor
+     */
+    template<typename T, int rank, portableWrapper::arrayTags tag = portableWrapper::arrayTags::accelerated>
+    class simpleZeroGradientBC : public singleVariableBC<T, rank, tag>
+    {
+    public:
+        simpleZeroGradientBC(const SAMS::variableDef &varDef)
+            : singleVariableBC<T, rank, tag>(varDef)
+        {
+        }
+
+        void apply(int dimension, SAMS::domain::edges edge) override
+        {
+            int edgeIndex = (edge == SAMS::domain::edges::lower) ? 0 : 1;
+            auto &ranges = this->boundaryRanges[dimension * 2 + edgeIndex];
+            auto &var = this->variable;
+            T_indexType lastDomainPoint;
+            auto &dimInfo = this->varDef.getDimension(dimension);
+            if (edge == SAMS::domain::edges::lower){
+                lastDomainPoint = dimInfo.getLocalDomainLB();
+            } else {
+                lastDomainPoint = dimInfo.getLocalDomainUB();
+            }
+            zeroGradientHelper<T, rank, tag> helper(var, dimension, lastDomainPoint);
             std::apply([&helper](auto... params){
                 portableWrapper::applyKernel(helper, params...);
             }, ranges);

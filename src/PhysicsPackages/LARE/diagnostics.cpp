@@ -47,10 +47,15 @@ namespace LARE
     }
 
     template<typename T_writer>
-    void LARE3D::registerOutput(writer<T_writer> &writer, simulationData &data)
+    void LARE3D::registerOutputMeshes(writer<T_writer> &writer, simulationData &data)
     {
         writer.template registerRectilinearMesh<T_dataType>("MeshCC", data.nx, data.ny, data.nz);
 
+    }
+
+    template<typename T_writer>
+    void LARE3D::registerOutputVariables(writer<T_writer> &writer, simulationData &)
+    {
         writer.template registerData<T_dataType>("rho", "MeshCC");
         writer.template registerData<T_dataType>("energy_electron", "MeshCC");
         writer.template registerData<T_dataType>("energy_ion", "MeshCC");
@@ -62,13 +67,16 @@ namespace LARE
         writer.template registerData<T_dataType>("bz", "MeshCC");
     }
 
+    template<typename T_writer>
+    void LARE3D::writeOutputMeshes(writer<T_writer> &writer, simulationData &data){
+        writer.writeRectilinearMesh("MeshCC", &data.xc_host(1), &data.yc_host(1), &data.zc_host(1));
+    }
+
     template <typename T_writer>
-    void LARE3D::writeOutput(writer<T_writer> &writer, simulationData &data)
+    void LARE3D::writeOutputVariables(writer<T_writer> &writer, simulationData &data)
     {
         pw::portableArrayManager manager;
         hostVolumeArray host;
-
-        writer.writeRectilinearMesh("MeshCC", &data.xc_host(1), &data.yc_host(1), &data.zc_host(1));
 
         getHostVersion(data, manager, data.rho, host);
         writer.writeData("rho", host.data());
@@ -102,27 +110,17 @@ namespace LARE
 //Perhaps another X macro?
 #if defined(USE_HDF5)
 //Instantiate the templates for HDF5 writer
-    template void LARE3D::registerOutput<HDF5File>(writer<HDF5File> &writer, simulationData &data);
-    template void LARE3D::writeOutput<HDF5File>(writer<HDF5File> &writer, simulationData &data);
+    template void LARE3D::registerOutputMeshes<HDF5File>(writer<HDF5File> &writer, simulationData &data);
+    template void LARE3D::registerOutputVariables<HDF5File>(writer<HDF5File> &writer, simulationData &data);
+    template void LARE3D::writeOutputMeshes<HDF5File>(writer<HDF5File> &writer, simulationData &data);
+    template void LARE3D::writeOutputVariables<HDF5File>(writer<HDF5File> &writer, simulationData &data);
 #else
 //Instantiate the templates for simple writer
-    template void LARE3D::registerOutput<simpleFile>(writer<simpleFile> &writer, simulationData &data);
-    template void LARE3D::writeOutput<simpleFile>(writer<simpleFile> &writer, simulationData &data);
+    template void LARE3D::registerOutputMeshes<simpleFile>(writer<simpleFile> &writer, simulationData &data);
+    template void LARE3D::registerOutputVariables<simpleFile>(writer<simpleFile> &writer, simulationData &data);
+    template void LARE3D::writeOutputMeshes<simpleFile>(writer<simpleFile> &writer, simulationData &data);
+    template void LARE3D::writeOutputVariables<simpleFile>(writer<simpleFile> &writer, simulationData &data);
 #endif
-
-    void LARE3D::output(simulationData &data)
-    {
-#if defined(USE_HDF5)
-        HDF5File writer;
-#else
-        simpleFile writer;
-#endif
-        std::string Name = "diagnostics_step_" + std::to_string(data.step);
-        writer.openFile(Name.c_str()); 
-        registerOutput(writer, data);
-        writeOutput(writer, data);
-        writer.closeFile();
-    }
 
     void LARE3D::energy_correction(simulationData &data)
     {
