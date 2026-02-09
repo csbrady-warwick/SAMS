@@ -73,7 +73,7 @@ Yeah, that is trickier. We should probably write something here about how to do 
 
 ### Built in boundary conditions
 
-You can select from built in boundary conditions in the control_variables function just as you can in the Fortran code, albeit with `BCType::` in front of the boundary condition type. For example, to set the left x boundary to be a fixed boundary, you would write `data.bc_x_left = BCType::FIXED;` instead of `bc_x_left = 1`. The same applies for the other boundaries and other boundary condition types.
+You can select from built in boundary conditions in the control_variables function just as you can in the Fortran code, albeit with `BCType::` in front of the boundary condition type. For example, to set the left x boundary to be a fixed boundary, you would write `data.bc_x_left = BCType::OTHER;` instead of `bc_x_left = BC_OTHER`. The same applies for the other boundaries and other boundary condition types.
 
 ### Custom boundary conditions
 
