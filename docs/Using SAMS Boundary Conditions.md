@@ -63,7 +63,7 @@ varDef.addBoundaryCondition(1, SAMS::boundaryConditions::edge::lower, bc);
 varDef.addBoundaryCondition(1, SAMS::boundaryConditions::edge::upper, bc);
 ```
 
-The first version addes the same boundary condition object to both edges, while the second version creates two copies of the boundary condition object and addes them to each edge. Again, for the built in boundary conditions this doesn't matter in the least, but it can be important for large boundary conditions or boundary conditions that rely on tracking state since the first version will have a single state that is shared between both edges, while the second version will have two separate states.
+The first version adds the same boundary condition object to both edges, while the second version creates two copies of the boundary condition object and addes them to each edge. Again, for the built in boundary conditions this doesn't matter in the least, but it can be important for large boundary conditions or boundary conditions that rely on tracking state since the first version will have a single state that is shared between both edges, while the second version will have two separate states.
 
 If you wish to deliberately add the same boundary condition object on multiple edges then you should capture the return value from the `addBoundaryCondition` method. The result will be a shared_ptr to a base `boundaryCondition` object that is the boundary condition that was added to the variable definition. You can then use this shared pointer to add the same boundary condition to multiple edges, and you can also use it to modify the boundary condition after it has been added to the variable definition if you need to.
 
@@ -149,7 +149,7 @@ SAMS::simplePeriodicBC<valueType, rank, memorySpace> (variableDefinition);
 Within your package it is very easy to apply a boundary condition. If you have the variable definition for the variable that you want to apply the boundary condition to then you can just call the `applyBoundaryConditions` method on the variable definition and it will apply all of the boundary conditions that are attached to that variable definition.
 
 ```cpp
-auto& varDef = harness.variableRegistry.getVariableDefinition("rho");
+auto& varDef = harness.variableRegistry.getVariableDefinition("rho"); // Take care not to forget the reference specifier '&' here
 varDef.applyBoundaryConditions();
 ```
 

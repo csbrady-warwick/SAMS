@@ -14,7 +14,7 @@ We don't have one yet. The idea is that any part of the code can access the inpu
 
 ## The SAMS runner
 
-The packages in SAMS are marshalled by a class called the runner, which is responsible for calling the appropriate functions in the packages at the appropriate times. The runner itself does little other than call the fucntions on the packages, and with one exception that is mentioned later packages do not interact directly with the runner. The runner does the following operations
+The packages in SAMS are marshalled by a class called the runner, which is responsible for calling the appropriate functions in the packages at the appropriate times. The runner itself does little other than call the functions on the packages, and with one exception that is mentioned later packages do not interact directly with the runner. The runner does the following operations
 
 1. Determines which packages are activated by the user at run time and initialises them. 
 
@@ -81,7 +81,7 @@ namespace mysimulation {
 }
 ```
 
-It is easiest not to put the definition of your datapack class in your package class, since there are restrictions placed on the visibility of such subclasses in CUDA programming. If the dataPack declaration is not found then no specific member is created by the runner. NOTE - the data pack should not be a simple type. The types are deduplicated by the runner, so if two packages want a data pack of the same type then they will share the same instance of it. This is intended since it allows very close coupling between packages if they want to share data, but it means that if you want to have two different instances of the same type then you need to wrap them in a struct to make them different types. If your code wants more than one type in its datapack then it should use the `dataPacks::multiPack` struct to create a new type that will register multiple data packs with the runner. For example:
+It is easiest not to put the definition of your datapack class in your package class, since there are restrictions placed on the visibility of such subclasses in CUDA programming. If the dataPack declaration is not found then no specific member is created by the runner. NOTE - the data pack should not be a simple type (meaning a string or a double etc). The types are deduplicated by the runner, so if two packages want a data pack of the same type then they will share the same instance of it. This is intended since it allows very close coupling between packages if they want to share data, but it means that if you do not want this behaviour, you must force the types to be distinct by wrapping them in a struct. If your code wants more than one subset of variables, then you can define several structs and use the `dataPacks::multiPack` struct to register multiple data packs with the runner. For example:
 
 ```cpp
 namespace mysimulation {
@@ -101,7 +101,7 @@ namespace mysimulation {
 }
 ```
 
-The contents of the multiPack will be unpacked by the runner, so the package can ask for a reference to either `myDataPack` or `myOtherDataPack` and it will get the correct one. The data pack system is quite flexible, and allows for a wide range of different data pack designs, so you can design your data pack in whatever way makes the most sense for your package.
+The contents of the multiPack will be unpacked by the runner, so the package can ask for a reference to either `myDataPack` or `myOtherDataPack` and it will get the correct one. The data pack system is quite flexible, and allows for a wide range of different data pack designs, so you can design your data pack(s) in whatever way makes the most sense for your package.
 
 ## Runner events
 
@@ -122,7 +122,9 @@ void runnerInteraction(RunnerType& runner){
 }
 ```
 
-This function just needs to be implemented by a package for it to be called by the runner. 
+The specified function just needs to be implemented by the chosen package for it to be called by the runner. 
+
+NOTE: runnerInteraction functions should be unusual. If there is something in your package which seems to need this function, please discuss this with the core dev team. 
 
 ### `initialize` event
 
@@ -135,7 +137,7 @@ void initialize(){
     //Just set up internal state
 }
 ```
-is a valid implementation of `initialize`. In fact, it is a common one since initialize is for setting up internal state before any arrays are allocated, so it is common for a package to use this to initialise state that is store in the package class itself rather than in a data pack. However, if you want to have access to the data pack in `initialize` then you can just request a reference to it in the signature, and the ASMF will automatically pass it to you. So, for example, if your package has a data pack called `myDataPack` then you can implement `initialize` like this:
+is a valid implementation of `initialize`. In fact, it is a common one since initialize is for setting up internal state before any arrays are allocated, so it is common for a package to use this to initialise state that is stored in the package class itself rather than in a data pack. However, if you want to have access to the data pack in `initialize` then you can just request a reference to it in the signature, and the ASMF will automatically pass it to you. So, for example, if your package has a data pack called `myDataPack` then you can implement `initialize` like this:
 
 ```cpp
 using dataPack = myDataPack;
@@ -155,13 +157,15 @@ void initialize(myDataPack& dataPack){
 }
 ```
 
+NOTE: the order in which each stage is called on each package is fixed, but not trivial to manipulate. If you are implementing a package which requires a specific ordering with respect to another, please contact the core dev team.
+
 ## `registerAxes` event
 
-The register axes event is called after `initialize`, and is for registering the axes that the package needs. This event is the first that will make use of the `SAMS::harness` object. The harness handles all common features of the simulation, and is used to specify spatial domains, variables, ghost cells etc. The harness is always available through the ASMF, so you can request a reference to it in the signature of any event. but it only makes sense to request it in some specific events, and `registerAxes` is the first of those events. In `registerAxes` you should use the harness to register the axes that your package needs, and to specify how those axes are mapped to the MPI domain decomposition. The runner will then use this information to set up the MPI domain decomposition and to allocate the appropriate amount of memory for the variables that your package needs. The harness has a member variable called `axisRegistry` which is used to register axes. See the full developer documentation for the `axisRegistry` class for full details on how to use it, but an example from LARE3D is shown here:
+The register axes event is called after `initialize`, and is for registering the axes that the package needs. This event is the first that will make use of the `SAMS::harness` object. The harness handles all common features of the simulation, and is used to specify spatial domains, variables, ghost cells etc. The harness is always available through the ASMF, so you can request a reference to it in the signature of any event. This only makes sense to do for some specific events, and `registerAxes` is the first of those events. In `registerAxes` you should use the harness to register the axes that your package needs, and to specify how those axes are mapped to the MPI domain decomposition. The runner will then use this information to set up the MPI domain decomposition and to allocate the appropriate amount of memory for the variables that your package needs. The harness has a member variable called `axisRegistry` which is used to register axes. See the full developer documentation for the `axisRegistry` class for full details on how to use it, but an example from LARE3D is shown here:
 
 ```cpp
 void registerAxes(SAMS::harness& harness){
-    //Register the x axis, which is a global axis that is not mapped to the MPI domain decomposition
+    //Register x, y, z axes, mapped to corresponding MPI directions
         harness.axisRegistry.registerAxis("X", SAMS::MPIAxis(0));
         harness.axisRegistry.registerAxis("Y", SAMS::MPIAxis(1));
         harness.axisRegistry.registerAxis("Z", SAMS::MPIAxis(2));
@@ -181,20 +185,20 @@ void registerAxes(SAMS::harness& harness){
 
 At this stage all that registration involves is setting up the platonic ideal of an axis. "There exists an axis called "X" that is mapped to the first MPI direction". All of the details are registered later.
 
-## Register variables event
+## `registerVariables` event
 
-The register variables event is called after `registerAxes`, and is for registering the variables that the package needs. In this event you should use the harness to register the variables that your package needs, and to specify how those variables are mapped to the axes that you registered in `registerAxes`. Note that in general a package should only register the variables that it needs for its own calculations, so a package that only sets up an initial condition for a variable should NOT register the variable that it is setting up. This is not because you shouldn't register a variable twice, in fact you definitely should register a variable twice if two packages use it for their calculations, but because if an initial condition registers a variable then a silent failure mode is possible where an initial condition registers a variable but no simulation then makes use of it.
+The register variables event is called after `registerAxes`, and is for registering the variables that the package needs. In this event you should use the harness to register the variables that your package needs, and to specify how those variables are mapped to the axes that you registered in `registerAxes`. Note that in general a package should only register the variables that it needs for its own calculations, so a package that only sets up an initial condition for a variable should NOT register the variable that it is setting up. This is not because you shouldn't register a variable twice (see next paragraph), but to help avoid a silent failure mode where an initial condition registers a variable but no simulation then makes use of it.
 
-On the other hand, if two packages both make use of a variable for their calculations then they should both register it. This is especially important because part of the registration process is to say how many ghost cells a package needs for it's calculations. Each package should register the number of ghost cells that it needs for its own algorithms, and the harness system will select the largest number of ghost cells that any package needs for a given variable and will allocate that many ghost cells for that variable. This is one reason why we use LARE style indexing. Regardless of the number of ghost cells, the domain always starts at either 1 if the variable is cell centred, or 0 if the variable is face centred.
+On the other hand, if two packages both make use of a variable for their calculations then they should both register it. This is especially important because part of the registration process is to say how many ghost cells a package needs for its calculations. Each package should register the number of ghost cells that it needs for its own algorithms, and the harness system will select the largest number of ghost cells that any package needs for a given variable and will allocate that many ghost cells for that variable. This is one reason why we use LARE style indexing with negative indices for ghost cells. Regardless of the number of ghost cells, the domain always starts at either 1 if the variable is cell centred, or 0 if the variable is face centred.
 
-When you register a variable, you specify a name and a list of axes that the variable is defined on. The name must be unique among all variables, and should be descriptive of what the variable represents. You also specify the staggering of a variable on each axis, whether the array should reside on the CPU always or on the GPU (if GPU mode is being used) the number of ghost cells that you need for that variable on each axis. So, taking LARE3D as an example again, we have the following
+When you register a variable, you specify a name and a list of axes that the variable is defined on. The name must be unique among all variables, and should be descriptive of what the variable represents. You also specify the staggering of a variable on each axis, whether the array should reside on the CPU always or on the GPU (if GPU mode is being used) and the number of ghost cells that you need for that variable on each axis. So, taking LARE3D as an example again, we have the following
 
 ```cpp
 
 void registerVariables(SAMS::harness& harness){
-        auto &varRegistry = harness.variableRegistry;
+        auto &varRegistry = harness.variableRegistry;   // Take care to remember the reference marker & in this idiom!
         const int ghosts = 2; // 2 Ghost cells at top and bottom of each dimension
-        //Register densty (cell centred on all axes)
+        //Register density (cell centred on all axes)
         varRegistry.registerVariable<T_dataType>("rho", pw::arrayTags::accelerated, SAMS::dimension("X", ghosts), SAMS::dimension("Y", ghosts), SAMS::dimension("Z", ghosts));
 
         //Register x velocity (face centred on all axes)
@@ -205,11 +209,14 @@ void registerVariables(SAMS::harness& harness){
 }
 ```
 
-This shows a fragment of the variable registration for LARE3D. The first variable is density, which is cell centred on all axes, so it is registered with the staggering set to the default of `SAMS::staggerType::CENTRED`. The second variable is the x velocity, which is face centred on all axes, so it is registered with the staggering set to `SAMS::staggerType::HALF_CELL` on all axes. The third variable is the y component of the magnetic field, which is face centred on the Y axis and cell centred on the X and Z axes, so it is registered with the staggering set to `SAMS::staggerType::HALF_CELL` on the Y axis and left as the default on the X and Z axes. Note the that order of the axes in the variable registration maps the axes to the dimensions of the variable, so the first axis in the variable registration is the X axis, the second axis is the Y axis and the third axis is the Z axis. The MPI decomposition of the variable matches the specified MPI decomposition of the axes.
+This shows a fragment of the variable registration for LARE3D. The first variable is density, which is cell centred on all axes, so it is registered with the default staggering of `SAMS::staggerType::CENTRED` (NOTE the UK spelling!). The second variable is the x velocity, which is face centred on all axes, so it is registered with the staggering set to `SAMS::staggerType::HALF_CELL` on all axes. The third variable is the y component of the magnetic field, which is face centred on the Y axis and cell centred on the X and Z axes, so it is registered with the staggering set to `SAMS::staggerType::HALF_CELL` on the Y axis and left as the default on the X and Z axes. Note the that order of the axes in the variable registration maps the axes to the dimensions of the variable, so the first axis in the variable registration is the X axis, the second axis is the Y axis and the third axis is the Z axis. The MPI decomposition of the variable matches the specified MPI decomposition of the axes.
 
 ## `defaultValues` event
 
-The purpose of this event is to set up default values for non array variables. The idea of this is that a package may want to set up default values that will be overriden by another package that is setting up an initial condition. For example, in LARE3D the `mu0` parameter of the `simulationData` data pack that represents the magnetic susceptibility is set to `mu0_si` the physically correct SI value. Most simulations will not want to change this value, but some simulations may work in normalised units, where `mu0` should be set to 1. Because LARE3D has set the default value of `mu0` there is no need for all of the packages that want this value to duplicate code to set it. Packages that do want to change the value can just override the default value in the `controlValues` event. 
+The purpose of this event is to set up default values for non array variables. The idea of this is that a package may want to set up default values that will be overriden by another package that is setting up an initial condition. For example, in LARE3D the `mu0` parameter of the `simulationData` data pack that represents the magnetic susceptibility is set to `mu0_si` the physically correct SI value. Most simulations will not want to change this value, but some simulations may work in normalised units and thus require LARE to run with `mu0` set to 1. 
+Packages which use the default value set by LARE3D do not need to do anything - packages which require another value can override the default value in the `controlValues` event. 
+
+NOTE: as mentioned above, the order in which packages apply their default and control values is fixed, so there are no 'race'-like conditions if multiple packages set the same value. However, two packages setting inconsistent values indicates that they are not compatible. So if your package sets values on the core solver, or values on other packages, please make sure to document this carefully. 
 
 The philosophical difference between `defaultValues` and `controlValues` is that `defaultValues` is for setting up default values that are intended to be overridden by other packages, while `controlValues` is for setting up control variables that are intended to be used by a particular simulation. So in general a package implementing a problem would not set `defaultValues`, but would set `controlValues` to set up the control variables for that problem, while a package implementing a physics module would set `defaultValues` to set up default values for parameters that are used in the physics module but not `controlValues` because a physics module does not know what problem is going to be run and so cannot set up the control values. As a consequence of this, it would be unusual for `defaultValues` to read user input, but it is very common for `controlValues` to read user input, since the control values are intended to be set by the user for a particular simulation.
 
@@ -266,11 +273,11 @@ void setDomain(SAMS::harness& harness){
 }
 ```
 
-The parameters here are almost slightly inconsistent. The first parameter is just the name of the axis, the same name that you passed to `registerAxis`. The second parameter is the number of cells in the global domain (across all MPI ranks). Note that this is the number of **cells**, so if you set it to 1 then you will have one grid cell. The next two parameters are the position of the lower and upper boundaries of the domain. Note that these are the positions of the boundaries, so the entire domain will go from 0 to 1 in this case. That means that the position of the first cell centre will be at 0.5*dx, where dx is the grid spacing, and the position of the last cell centre will be at 1 - 0.5*dx. The harness generates both cell centred and face centred grid values for each axis, but you specify the domain in terms of the edges of the domain in all cases.
+The parameters here specify several things. The first parameter is just the name of the axis, the same name that you passed to `registerAxis`. The second parameter is the number of cells in the global domain (across all MPI ranks). Note that this is the number of **cells**, so if you set it to 1 then you will have one grid cell. The next two parameters are the position of the lower and upper boundaries of the domain. Note that these are the positions of the boundaries, so the entire domain will go from 0 to 1 in this case. That means that the position of the first cell centre will be at 0.5*dx, where dx is the grid spacing, and the position of the last cell centre will be at 1 - 0.5*dx. The harness generates both cell centred and face centred grid values for each axis, but you specify the domain in terms of the edges of the domain in all cases.
 
 Future expansion of the axis registry will add the ability to specify the positions of grid sizes or grid edges, or the widths of cells and a lower bound to allow for more general stretched grids.
 
-Generally, whatever package is responsible for setting up the problem will also set up the domain. This is one of the parts where SAMS works by contract as much as by code - most packages that do the actual work expect that their domains have been set up by other packages that set up their initial conditions. If the package setting up the initial conditions fails to do so then the physics package will fail when it tries to get it's arrays from the registry.
+Generally, whatever package is responsible for setting up the problem will also set up the domain. This is one of the parts where SAMS works by contract as much as by code - most packages that do the actual work expect that their domains have been set up by other packages that set up their initial conditions. If the package setting up the initial conditions fails to do so then the physics package will fail when it tries to get its arrays from the registry.
 
 ### `getVariables` event
 
@@ -313,17 +320,17 @@ The variable grabbing function is quite similar but simpler. You simply specify 
 
 The purpose of this event is to provide a correctly positioned time in the sequence of events for setting up boundary conditions. It occurs just before the main simulation loop starts, so that all parts of the initial conditions are in place, so if a boundary condition wants to record the initial state of an edge for some reason then that data is available for it to do so. 
 
-Setting up bounary conditions is detailed in the separate `Using SAMS Boundary Conditions` and `Developing SAMS Boundary Conditions` documents, but the general principle is that you use the ASMF to request the harness, and then you get the variable definitions from the variable registry and you attach boundary condition objects to the variable definitions. There are several built in boundary conditions that provide conventional boundary conditions, so as an example if you want to clamp the density at the lower X boundary to a value of 1.0 then you can do this:
+Setting up boundary conditions is detailed in the separate `Using SAMS Boundary Conditions` and `Developing SAMS Boundary Conditions` documents, but the general principle is that you use the ASMF to request the harness, and then you get the variable definitions from the variable registry and you attach boundary condition objects to the variable definitions. There are several built in boundary conditions that provide conventional boundary conditions, so as an example if you want to clamp the density at the lower X boundary to a value of 1.0 then you can do this:
 
 ```cpp
 void setBoundaryConditions(SAMS::harness& harness){
     auto& varRegistry = harness.variableRegistry;
-    auto& rhoDef = varRegistry.getVariable("rho");
+    auto& rhoDef = varRegistry.getVariable("rho"); // Take care not to miss the reference specifier, &
     rhoDef.addBoundaryCondition(0, SAMS::domain::edges::lower, SAMS::simpleClamp<SAMS::T_dataType, 3, SAMS::arrayTags::accelerated>(rhoDef, 1.0));
 }
 ```
 
-This is detailed better in the other documents, but you can see the basic principle. You attack a boundary condition to an edge by index (0 - first index, 1 - second index etc.) and by which edge (lower or upper). The boundary condition is an object that is called by the runner to apply the boundary condition at each time step. The `simpleClamp` boundary condition is a built in boundary condition that just clamps the value of the variable to a specified value at the boundary. In this case it clamps the density to 1.0 at the lower X boundary. The built in boundary conditions are templated on the type, rank and array tag just like the portable arrays, and each have their own constructor parameters that specify the details of the boundary condition.
+This is detailed better in the other documents, but you can see the basic principle. You attach a boundary condition to an edge by index (0 - first index, 1 - second index etc.) and by which edge (lower or upper). The boundary condition is an object that is called by the runner to apply the boundary condition at each time step. The `simpleClamp` boundary condition is a built in boundary condition that just clamps the value of the variable to a specified value at the boundary. In this case it clamps the density to 1.0 at the lower X boundary. The built in boundary conditions are templated on the type, rank and array tag just like the portable arrays, and each have their own constructor parameters that specify the details of the boundary condition.
 
 ### `registerOutputMesh` event
 
@@ -365,7 +372,7 @@ void registerOutputVariable(writer<T>& writer){
 
 You can still use the ASMF to request data packs etc. in this event, but the first parameter must be a reference to the writer that you want to register output with, and it must be templated on the inner type of the writer.
 
-The purpose of this is to register the variables the package wants to output with the writer. This phase is to allow writing writer packages that need the variables and axes to be registered before the data is written. This often does nothing, because many writers do not need axes to be preregistered, but you should always implement it so that your package can be used with any writer, including writers that do need variables to be preregistered.
+The purpose of this is to register the variables the package wants to output with the writer. This phase is to allow writing writer packages that need all variables and axes to be pre-specified before any data is written. This often does nothing, because many writers can write axes and variables one by one, but you should always implement it so that your package can be used with any writer, including writers that do need variables to be preregistered.
 
 Note that there is a separate write mesh and write variable phase because some writers need the meshes to be registered before the variables, while others do not.
 
@@ -467,7 +474,7 @@ Other physics packages should only use this step if they want to fully operator 
 
 ### `queryOutput` event
 
-This event is triggered after the update sequence completes. This event has a single bool reference parameter as the first parameter. If a given physics package wants to trigger output at the end of a given timestep, then it should set this parameter to true. You should NEVER set this parameter to false, so the correct way to use this is just
+This event is triggered after the update sequence completes. This event has a single bool reference parameter as the first parameter. If a given physics package wants to trigger output at the end of a given timestep, then it should set this parameter to true. You should NEVER set this parameter to false (as that would cancel an output request from any prior packages), so the correct way to use this is just
 
 ```cpp
 void queryOutput(bool& outputThisStep){
@@ -481,7 +488,7 @@ This event uses the ASMF, so you can request data packs etc. in this event as we
 
 ### `queryTerminate` event
 
-This event is triggered after the update sequence completes and after the `queryOutput` event. This event has a single bool reference parameter as the first parameter. If a given physics package wants to trigger termination of the simulation at the end of a given timestep, then it should set this parameter to true. You should NEVER set this parameter to false, so the correct way to use this is just
+This event is triggered after the update sequence completes and after the `queryOutput` event. This event has a single bool reference parameter as the first parameter. If a given physics package wants to trigger termination of the simulation at the end of a given timestep, then it should set this parameter to true. You should NEVER set this parameter to false, (as that would cancel a terminate request from any prior packages), so the correct way to use this is just
 
 ```cpp
 void queryTerminate(bool& terminateThisStep){
@@ -491,16 +498,16 @@ void queryTerminate(bool& terminateThisStep){
 }
 ```
 
-This event uses the ASMF, so you can request data packs etc. in this event as well, but the first parameter must be a reference to a bool that is used to trigger termination of the simulation.1
+This event uses the ASMF, so you can request data packs etc. in this event as well, but the first parameter must be a reference to a bool that is used to trigger termination of the simulation.
 
 
 ### `finalize` event
 
-This even it called at the end of the simulation and is intended to allow a simulation to tear down all of it's resources. While generally this event will be called just before the code terminates, it is good practice to manually release all memory etc. in this event, and to do any other clean up that is needed. Variables allocated through the variable registry will be automatically deallocated by the runner, but if you have allocated any other resources then you should release them in this event. For example, if you have allocated any memory that is not managed by the variable registry, or if you have opened any files, then you should release that memory and close those files in this event.
+This event is called at the end of the simulation and is intended to allow a simulation to tear down all of its resources. While generally this event will be called just before the code terminates, it is good practice to manually release all memory etc. in this event, and to do any other clean up that is needed. Variables allocated through the variable registry will be automatically deallocated by the runner, but if you have allocated any other resources then you should release them in this event. For example, if you have allocated any memory that is not managed by the variable registry, or if you have opened any files, then you should release that memory and close those files in this event.
 
 ### `calculateTimestep` event
 
-The only thing that hasn't been described is setting the timestep. The runner cannot itself calculate the timestep, but it does find the minimum timestep across all packages and across all MPI ranks automatically. This is done by calling the `calculateTimestep` event on each package at the end of each timestep, and then taking the minimum of all of the timesteps that are returned by the packages. So if a package needs to set a specific timestep for any reason, then it should implement the `calculateTimestep` event and return the desired timestep from that event. If a package does not implement the `calculateTimestep` event then it is assumed that that package has no constraints on the timestep, and so it returns a very large timestep that will not be selected as the minimum. This is done by the function requesting the `timeState` object and setting the dt member variable to the minimum of the current value of dt and the desired timestep. For example, in LARE3D we have the following `calculateTimestep` function:
+The only thing that hasn't been described is setting the timestep. The runner cannot itself calculate the timestep, but it does find the minimum timestep across all packages and across all MPI ranks. This is done by calling the `calculateTimestep` event on each package at the end of each timestep. So if a package needs to set a specific timestep for any reason, then it should implement the `calculateTimestep` event and set the desired timestep from that event. If a package does not implement the `calculateTimestep` event then it is assumed that that package has no constraints on the timestep. This is done by the function requesting the `timeState` object and setting the dt member variable to the **minimum of the current value of dt and the desired timestep**. For example, in LARE3D we have the following `calculateTimestep` function:
 
 ```cpp
         void calculateTimestep(SAMS::timeState &timeData, simulationData &data){
@@ -511,7 +518,7 @@ The only thing that hasn't been described is setting the timestep. The runner ca
 
 ### `getTimestep` event
 
-A package must not assume that the timestep that it has specified is the smallest of all packages, or the minimum across all ranks, so there is a separate `getTimestep` event that is called after the minimum timestep has been calculated. This allows a package to get the actual timestep that will be used for the next timestep, and to update any internal data structures that need to be updated with the new timestep. For example, in LARE3D we have the following `getTimestep` function:
+A package must not assume that the timestep that it has specified is the smallest of all packages, or the minimum across all ranks, so there is a separate `getTimestep` event that is called after the required timestep has been calculated. This allows a package to get the actual timestep that will be used for the next timestep, and to update any internal data structures that need to be updated with the new timestep. For example, in LARE3D we have the following `getTimestep` function:
 
 ```cpp
         void getTimestep(SAMS::timeState &timeData, simulationData &data){
@@ -523,6 +530,6 @@ A package must not assume that the timestep that it has specified is the smalles
 
 Different core solver packages may need timestep to be set a different times, so there isn't a specific timing for the `calculateTimestep` or `getTimestep` events, although they do immediately follow each other. They are triggered in response to a request from a core solver package. That request is done using an object called `controlFunctions`. This object can be requested through the ASMF in any function and is essentially a type erased wrapper around the runner class. As SAMS evolves it will have a range of functions, but at the moment it has two
 
-1) `calculateTimestep()` - this function triggers the `calculateTimestep` event on all packages and calculates the minimum timestep across all packages and all ranks. This is called by a core solver package when it needs to know the timestep for the next timestep.
+1) `calculateTimestep()` - this function triggers the `calculateTimestep` event on all packages to obtain the minimum timestep across all packages and all ranks. This is called by a core solver package when it needs to know the timestep for the next timestep.
 
 2) `isPackageActive(name)` - this function returns true if a package with the given name is active in the current simulation. This is for use in packages that need to know whether another package is active or not, for example because they need to know whether they can use a variable that is only registered by that package.

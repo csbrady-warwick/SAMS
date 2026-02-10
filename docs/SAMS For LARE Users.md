@@ -1,6 +1,6 @@
 # For existing LARE Users
 
-The existing Fortran code LARE3D has been in use for many years, and the same solver is available in SAMS. If you are an existing LARE user then there is a compatability layer build into SAMS to provide the same general interface as the Fortran code.
+The existing Fortran code LARE3D has been in use for many years, and the same solver is available in SAMS. If you are an existing LARE user then there is a compatability layer built into SAMS to provide the same general interface as the Fortran code.
 
 ## SAMS warning
 
@@ -10,7 +10,7 @@ Note that SAMS is not currently a working, released code. It is currently at ver
 
 In order to fit the SAMS framework, the LARE code has been split into two parts. The LARE solver itself, which is a C++ implementation of the LARE3D algorithm, and a set of functions that are used to set up the initial conditions, control variables and boundary conditions for the solver. All of these are set up in much the same way as the Fortran code.
 
-As a LARE user using SAMS, you will only need to edit the files in `src/InitialConditions/LARE` directory to set up your problem.
+As a LARE user using SAMS, you will only need to edit the files in `src/InitialConditions/LARE` directory to set up your problem, and then rebuild the code. 
 
 It is worth pointing out that this is considered a "fallback" option for existing LARE users. A more modern approach to running simulations with SAMS does exist.
 
@@ -36,9 +36,9 @@ for (int ix = 1; ix < data.nx; ++ix)
     }
 }
 ```
-You will notice that the loop indices are the same as in the Fortran code, so density and specific internal energy run (1->nx, 1->ny, 1->nz), velocities run (0->nx, 0->ny, 0->nz) and bx runs (0->nx, 1->ny, 1->nz), by run (1->nx, 0->ny, 1->nz) and bz runs (1->nx, 1->ny, 0->nz). The xc,yc,zc and xb, yb, zb axis arrays are still present as in Fortran. The same indexing is used in SAMS as in LARE3D, although you will notice that my loops are ordered in reverse compared to the Fortran code. This is because SAMS uses a different memory layout to the Fortran code, and so the loops need to be ordered differently to achieve good performance. While you should not write your code like this, it will work so long as you never want to run anywhere other than on your system's CPU.
+You will notice that the loop indices are the same as in the Fortran code, so density and specific internal energy run (1->nx, 1->ny, 1->nz), velocities run (0->nx, 0->ny, 0->nz) and bx runs (0->nx, 1->ny, 1->nz), by runs (1->nx, 0->ny, 1->nz) and bz runs (1->nx, 1->ny, 0->nz). The xc, yc, zc and xb, yb, zb axis arrays are still present as in Fortran. The same indexing is used in SAMS as in LARE3D, although you will notice that my loops are ordered in reverse compared to the Fortran code. This is because SAMS uses a different memory layout to the Fortran code, and so the loops need to be ordered differently to achieve good performance. While you should not write your code like this, it will work so long as you never want to run anywhere other than on your system's CPU.
 
-The correct way to write initial conditions in SAMS is to use the `pw::applyKernel` function. This takes a function kernel describing the operations to be performed on each grid point, and applies it to the entire grid in a performance portable way. The kernel would normally be written as a lambda function, and the grid is specified using `pw::Range` objects. For example, the above initial conditions would be written as:
+The correct way to write initial conditions in SAMS is to use the `pw::applyKernel` function. This takes a function kernel describing the operations to be performed on a single grid point, and applies it to the entire grid in a performance portable way. The kernel would normally be written as a lambda function, and the grid is specified using `pw::Range` objects. For example, the above initial conditions would be written as:
 
 ```cpp
 pw::applyKernel(
@@ -51,9 +51,9 @@ pw::applyKernel(
     data.xcLocalDomainRange, data.ycLocalDomainRange, data.zcLocalDomainRange);
 ```
 
-As you can see the kernel lambda itself looks very similar to the loop body of the previous example, but it is now wrapped in a call to `pw::applyKernel` and the loop indices are replaced with the arguments of the lambda function. The grid is specified using the `data.xcLocalDomainRange`, `data.ycLocalDomainRange` and `data.zcLocalDomainRange` objects, which specify the range of indices for each direction. The "LocalDomainRange" objects represent the range of indices for the computational domain local to the current MPI rank not including ghost cells, so they are the correct ranges to use for setting up initial conditions. The xc, yc and zc prefixes mean that these are for variables defined at the cell centres, so they run from 1 to nx, 1 to ny and 1 to nz. For variables defined at the cell faces, you would use the `data.xbLocalDomainRange`, `data.ybLocalDomainRange` and `data.zbLocalDomainRange` objects instead, which run from 0 to nx, 0 to ny and 0 to nz.
+As you can see the kernel lambda itself looks very similar to the loop body of the previous example, but it is now wrapped in a call to `pw::applyKernel` and the loop indices become the arguments of the lambda function. The grid is specified using the `data.xcLocalDomainRange`, `data.ycLocalDomainRange` and `data.zcLocalDomainRange` objects, which specify the range of indices for each direction. The "LocalDomainRange" objects represent the range of indices for the computational domain local to the current MPI rank not including ghost cells, so they are the correct ranges to use for setting up initial conditions. The xc, yc and zc prefixes mean that these are for variables defined at the cell centres, so they run from 1 to nx, 1 to ny and 1 to nz. For variables defined at the cell faces, you would use the `data.xbLocalDomainRange`, `data.ybLocalDomainRange` and `data.zbLocalDomainRange` objects instead, which run from 0 to nx, 0 to ny and 0 to nz.
 
-Actually, you don't need to get so clever when setting up such simple initial conditions. If you just wanted to set the entire of density to 1, then you can just use the assign function
+For simple initial conditions like rho and energy\_ion above, there is a function to make things simpler. For example, to set the entire of density to 1, use the assign function like this:
 
 ```cpp
 pw::assign(data.rho, 1.0);
@@ -64,6 +64,7 @@ This will set the entire `data.rho` array to 1.0 in a performance portable way. 
 pw::assign(data.rho, 1.0, pw::Range(0,data.nx/2), pw::Range(0,data.ny), pw::Range(0,data.nz));
 pw::assign(data.rho, 2.0, pw::Range(data.nx/2+1,data.nx), pw::Range(0,data.ny), pw::Range(0,data.nz));
 ```
+Note that the last 3 parameters are a Range object - here we specify start and end directly, but we could also use the built-in LocalDomainRange for y and z that we just saw.
 
 ### What about initial conditions that require integration along a direction?
 
@@ -77,7 +78,7 @@ You can select from built in boundary conditions in the control_variables functi
 
 ### Custom boundary conditions
 
-The boundary conditions are defined in the `src/InitialConditions/LARE/boundary.cpp` file. The functions are not quite the same as in LARE because SAMS fundamentally expects separate boundary conditions for separate variables, so there are separate functions for setting boundary conditions for density, energy_ion, energy_electron, each component of velocity and remap velocity and each component of the magnetic field. You can set up your own custom boundary conditions by editing these functions, and you can set different boundary conditions for different variables if you wish. The name of the function indicates which variable and which boundary it is for. For example, the function `density_bcs` is for setting the boundary conditions for density. Inside the function you can see the systems for checking boundary types and domain edges. Simply copy this approach and write your own code to set up the boundary conditions for each variable and each boundary as you wish.
+The boundary conditions are defined in the `src/InitialConditions/LARE/boundary.cpp` file. The functions are not quite the same as in LARE because SAMS fundamentally requires separate boundary conditions for separate variables, so there are separate functions for setting boundary conditions for density, energy_ion, energy_electron, each component of velocity and remap velocity and each component of the magnetic field. You can set up your own custom boundary conditions by editing these functions, and you can set different boundary conditions for different variables if you wish. The name of the function indicates which variable and which boundary it is for. For example, the function `density_bcs` is for setting the boundary conditions for density. Inside the function you can see the systems for checking boundary types and domain edges. Simply copy this approach and write your own code to set up the boundary conditions for each variable and each boundary as you wish.
 
  Set up your boundary conditions using the same approach as for initial conditions, but only applying the kernel to the ghost cells instead of the entire grid. Once again, you should use the performance portability layer to set the boundary conditions, and not normal loops. Just as there are `xcLocalDomainRange` range objects describing the domain, there are the following range objects describing the ghost cells for each boundary:
 
@@ -121,4 +122,7 @@ Currently SAMS does not have an input deck parser. When one is added in the futu
 
 ## Running your simulation
 
-Once you have set up those elements of the Lare initial conditions there is nothing else to do. You simply run SAMS activating the LARE3D and LAREInitialConditions packages.
+Once you have set up those elements of the Lare initial conditions, and rebuilt that part of the code, there is nothing else to do. You simply run SAMS activating the LARE3D and LAREInitialConditions packages, i.e.:
+```bash
+./lare3d LARE3D LAREInitialConditions
+```

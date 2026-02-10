@@ -1,10 +1,10 @@
 # SAMS User guide
 
-THere shouldn't be any SAMS users yet! We're still on version 0.0.3. We will add user documentation here as we go
+There shouldn't be any SAMS users yet! We're still on version 0.0.3. We will add user documentation here as we go
 
 ## Compiling SAMS
 
-SAMS uses CMake as it's build system, and it uses a conventional CMake out of source build. To compile SAMS, you first need to create a build directory, and then run CMake from that directory. For example:
+SAMS uses CMake as its build system, and it uses a conventional CMake out-of-source build. To compile SAMS, you first need to create a build directory, and then run CMake from that directory. For example:
 
 ```bash
 mkdir build
@@ -17,7 +17,7 @@ There are various parameters that you can turn on using `-DPARAMETER=ON` when yo
 
 1) `USE_MPI` - Turn on to enable MPI parallelism. This is required to run SAMS on more than one processor, but it also adds some overhead, so you may want to turn it off for small test problems.
 
-2) `KOKKOS_OPENMP` - Use Kokkos OpenMP rather than native OpenMP. This is generally slower than native OpenMP support
+2) `KOKKOS_OPENMP` - Use Kokkos OpenMP rather than native OpenMP. This is generally slower than native OpenMP support.
 
 3) `KOKKOS_CUDA` - Use Kokkos CUDA. This allows SAMS to run on NVIDIA GPUs. This requires a CUDA capable GPU and the CUDA toolkit to be installed.
 
