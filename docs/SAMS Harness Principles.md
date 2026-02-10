@@ -1,6 +1,6 @@
 # The SAMS Harness
 
-The SAMS harness its the part of the code that provides the infrastructure for handling things like memory, parallelism and the synchronisation of things like array sizes and axis decompositions across the various packages. The harness is split up into various components, only some of which a developer will normally have to interact with. A given package will always interact with a specific harness instance that it is handed by the runner that is running the package.
+The SAMS harness is the part of the code that provides the infrastructure for handling things like memory, parallelism and the synchronisation of things like array sizes and axis decompositions across the various packages. The harness is split up into various components, only some of which a developer will normally have to interact with. A given package will always interact with a specific harness instance that it is handed by the runner that is running the package.
 
 It is important to note that the harness is not itself intended to be high performance. Core elements are highly optimised, but it is generally expected that a physics package will obtain things like arrays before they start running and will hold onto them for the duration of the run. Only things like the application of boundary conditions should generally be requested directly from the harness while running.
 
@@ -73,7 +73,7 @@ SAMS::axisRegistry &axReg = harness.axisRegistry;//Get the axis registry for thi
 
 //Register an axis with the name "X"
 axReg.registerAxis("X"); //This creates an axis named "X" with no MPI decomposition
-//Register an axis with the name "X" and a decomposition over the second MPI dimension
+//Register an axis with the name "X" (again)
 axReg.registerAxis("X");
 
 //axReg.registerAxis("X", SAMS::MPIAxis(1)); //This would be invalid as the MPI mapping is not equivalent
@@ -143,7 +143,7 @@ Future expansions will include functions that return a `kokkos::view` or `kokkos
 
 ## The `SAMS::MPIManager` class
 
-Mostly package developers don't need to interact directly with the `SAMS::MPIManager` class. It is created, being passed a reference to the `SAMS::axisRegistry` class, and then used by the harness to manage the MPI decomposition of axes and variables. Variables that you want to have MPI decomposed should just be registered with the `SAMS::variableRegistry` class, so you don't have to write any MPI code for handling decomposition or communication, so mostly you will only want to query the `SAMS::MPIManager` class for information things like the communicator, the current rank, the size of the communicator etc. So, to show the "normal" features of the `SAMS::MPIManager` class, here is how you would get simple code
+Mostly package developers don't need to interact directly with the `SAMS::MPIManager` class. It is created, being passed a reference to the `SAMS::axisRegistry` class, and then used by the harness to manage the MPI decomposition of axes and variables. Variables that you want to have MPI decomposed should just be registered with the `SAMS::variableRegistry` class, so you don't have to write any MPI code for handling decomposition or communication, so mostly you will only want to query the `SAMS::MPIManager` class for information things like the communicator, the current rank, the size of the communicator etc. So, to show the "normal" features of the `SAMS::MPIManager` class, here is how you would get the usual properties
 
 ```cpp
 SAMS::MPIManager &mpiManager = harness.MPIManager;//Get the MPI manager for this harness
@@ -152,7 +152,7 @@ int nprocs = mpiManager.getSize(); //Get the size of the communicator
 int rank = mpiManager.getRank(); //Get the rank of the current process
 ```
 
-slight more advanced is the decomposition. In this case you can get the number of MPI decomposition dimensions, the size of the decomposition in each dimension and the coordinates of the current rank in the decomposition. For example:
+Slightly more advanced is the decomposition. In this case you can get the number of MPI decomposition dimensions, the size of the decomposition in each dimension and the coordinates of the current rank in the decomposition. For example:
 
 ```cpp
 SAMS::MPIManager &mpiManager = harness.MPIManager;//Get the MPI manager for this harness
