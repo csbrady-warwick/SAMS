@@ -355,6 +355,19 @@ namespace SAMS {
         }
 
         /**
+         * Get a single dimension by name
+         * @param axisName The name of the axis to get the dimension for
+         */
+        const dimension& getDimension(const std::string& axisName) const {
+            for(int i=0; i<rank; i++){
+                if(dimensions[i].axisName == axisName){
+                    return dimensions[i];
+                }
+            }
+            throw std::runtime_error("Error: variableDef getDimension axis name not found\n");
+        }
+
+        /**
          * Get a single dimension
          * @param dim The dimension to get (0 to rank-1)
          */
@@ -363,6 +376,19 @@ namespace SAMS {
                 throw std::runtime_error("Error: variableDef getDimension dimension out of range\n");
             }
             return dimensions[dim];
+        }
+
+        /**
+         * Get a single dimension by name
+         * @param axisName The name of the axis to get the dimension for
+         */
+        dimension& getDimension(const std::string& axisName) {
+            for(int i=0; i<rank; i++){
+                if(dimensions[i].axisName == axisName){
+                    return dimensions[i];
+                }
+            }
+            throw std::runtime_error("Error: variableDef getDimension axis name not found\n");
         }
 
         /**
@@ -524,12 +550,49 @@ namespace SAMS {
         }
 
         /**
+         * Call all boundary conditions on an edge and dimension passing the dimension by name
+         * @param axisName The name of the axis to call the boundary conditions on
+         * @param edge The edge to call the boundary conditions on (SAMS::domain::edges)
+         */
+        void applyBoundaryConditions(const std::string& axisName, SAMS::domain::edges edge){
+            int dim = -1;
+            for(int i=0; i<rank; i++){
+                if(dimensions[i].axisName == axisName){
+                    dim = i;
+                    break;
+                }
+            }
+            if(dim == -1){
+                throw std::runtime_error("Error: variableDef applyBoundaryConditions axis name not found\n");
+            }
+            applyBoundaryConditions(dim, edge);
+        }
+
+        /**
          * Call all boundary conditions on a specified dimension
          * @param dim The dimension to call the boundary conditions on (0 to rank-1
          */
         void applyBoundaryConditions(int dim){
             applyBoundaryConditions(dim, SAMS::domain::edges::lower);
             applyBoundaryConditions(dim, SAMS::domain::edges::upper);
+        }
+
+        /**
+         * Call all boundary conditions on a dimension specified by name
+         * @param axisName The name of the axis to call the boundary conditions on
+         */
+        void applyBoundaryConditions(const std::string& axisName){
+            int dim = -1;
+            for(int i=0; i<rank; i++){
+                if(dimensions[i].axisName == axisName){
+                    dim = i;
+                    break;
+                }
+            }
+            if(dim == -1){
+                throw std::runtime_error("Error: variableDef applyBoundaryConditions axis name not found\n");
+            }
+            applyBoundaryConditions(dim);
         }
 
         /**

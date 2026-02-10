@@ -114,6 +114,46 @@ namespace SAMS{
         }
 
         /**
+         * Get a dimension from a variable by name and dimension index. Throws an error if the variable does not exist or the dimension index is out of range.
+         * @param name The name of the variable
+         * @param dim The dimension index (0 to rank-1)
+         * @return The dimension
+         */
+        const dimension& getVariableDimension(const std::string& name, int dim) const {
+            return getVariable(name).getDimension(dim);
+        }
+
+        /**
+         * Get a dimension from a variable by name and dimension name. Throws an error if the variable does not exist or the dimension name is not found.
+         * @param name The name of the variable
+         * @param axisName The name of the axis associated with the dimension
+         * @return The dimension
+         */
+        const dimension& getVariableDimension(const std::string& name, const std::string& axisName) const {
+            return getVariable(name).getDimension(axisName);
+        }
+
+        /**
+         * Get a dimension from a variable by name and dimension index. Throws an error if the variable does not exist or the dimension index is out of range.
+         * @param name The name of the variable
+         * @param dim The dimension index (0 to rank-1)
+         * @return The dimension
+         */
+        dimension& getVariableDimension(const std::string& name, int dim) {
+            return getVariable(name).getDimension(dim);
+        }
+
+        /**
+         * Get a dimension from a variable by name and dimension name. Throws an error if the variable does not exist or the dimension name is not found.
+         * @param name The name of the variable
+         * @param axisName The name of the axis associated with the dimension
+         * @return The dimension
+         */
+        dimension& getVariableDimension(const std::string& name, const std::string& axisName) {
+            return getVariable(name).getDimension(axisName);
+        }
+
+        /**
          * Allocate memory for a specific variable
          * @param name The name of the variable
          */
@@ -343,6 +383,20 @@ namespace SAMS{
         }
 
         /**
+         * Call all boundary conditions on an edge and dimension specifying the dimension by name
+         * @param name The name of the variable
+         * @param axisName The name of the axis to call the boundary conditions on
+         * @param edge The edge to call the boundary conditions on (SAMS::domain::
+         */
+        void applyBoundaryConditions(const std::string &name, const std::string &axisName, SAMS::domain::edges edge){
+            auto it = variables.find(name);
+            if(it == variables.end()){
+                throw std::runtime_error("Error: variable " + name + " not found in registry\n");
+            }
+            it->second.applyBoundaryConditions(axisName, edge);
+        }
+
+        /**
          * Call all boundary conditions on a specified dimension
          * @param dim The dimension to call the boundary conditions on (0 to rank-1
          */
@@ -352,6 +406,19 @@ namespace SAMS{
                 throw std::runtime_error("Error: variable " + name + " not found in registry\n");
             }
             it->second.applyBoundaryConditions(dim);
+        }
+
+        /**
+         * Call all boundary conditions on a specified dimension specifying the dimension by name
+         * @param name The name of the variable
+         * @param axisName The name of the axis to call the boundary conditions on
+         */
+        void applyBoundaryConditions(const std::string &name, const std::string &axisName){
+            auto it = variables.find(name);
+            if(it == variables.end()){
+                throw std::runtime_error("Error: variable " + name + " not found in registry\n");
+            }
+            it->second.applyBoundaryConditions(axisName);
         }
 
         /**

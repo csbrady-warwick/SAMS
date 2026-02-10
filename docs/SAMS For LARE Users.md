@@ -101,6 +101,8 @@ So to set density to 1.0 in the ghost cells on the minimum x boundary, you would
 pw::assign(data.rho(data.xcminBCRange, data.ycLocalRange, data.zcLocalRange), 1.0);
 ```
 
+Note the here I am using `data.ycLocalRange` and `data.zcLocalRange` rather than `data.ycLocalDomainRange` and `data.zcLocalDomainRange`. This is because the boundary conditions should set all values along the other edges, not just the values in the computation domain.
+
 More complicated boundary conditions can be set up using the same kernels as the initial conditions, but only applying them to the ghost cell ranges instead of the entire domain. For example, to set a more complicated boundary condition on the minimum x boundary, you could write:
 
 ```cpp
@@ -113,7 +115,7 @@ pw::applyKernel(
 
 ### Time in boundary conditions
 
-Each boundary condition function has an argument called `time` which is a `SAMS::timeState` object. To get the current simulation time, use the `time.time` variable.
+Each boundary condition function has an argument called `time` which is a `SAMS::timeState` object. To get the current simulation time, use the `time.time` variable. Remember that the `vx1`, `vy1` and ,`vz1` variables have to be set at half of the timestep (`time.dt`) ahead of the other variables, just as in classic LARE.
 
 ## Parameterising your problem
 
