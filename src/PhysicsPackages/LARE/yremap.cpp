@@ -302,7 +302,7 @@ namespace LARE
         T_dataType v_advect = (data.vy1(ix, iy, iz) + data.vy1(ix, iy, izm)) * 0.5;
         T_dataType o_v = v_advect * data.dt;
 
-        T_dataType dby = (remap_data.db1(ix, iy, iz) + remap_data.db1(ix, iyp, iz)) * 0.5;
+        T_dataType dby = (remap_data.db1(ix, iy, iz) + remap_data.db1(ixp, iy, iz)) * 0.5;
         T_dataType dbyp = (remap_data.db1(ix, iyp, iz) + remap_data.db1(ixp, iyp, iz)) * 0.5;
         T_dataType dbyp2 = (remap_data.db1(ix, iyp2, iz) + remap_data.db1(ixp, iyp2, iz)) * 0.5;
         T_dataType dbym = (remap_data.db1(ix, iym, iz) + remap_data.db1(ixp, iym, iz)) * 0.5;

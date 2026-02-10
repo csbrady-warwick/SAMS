@@ -106,7 +106,7 @@ namespace LARE
 
         pw::applyKernel(LAMBDA(T_indexType ix, T_indexType iy, T_indexType iz) {
         T_indexType ixm = ix - 1;
-        data.bz(ix, iy, iz) = data.bz(ix, iy, iz) + remap_data.flux(ixm,iy,iz) - remap_data.flux(ix,iy,iz); }, Range(1, data.nx), Range(1, data.ny), Range(0, data.nz));
+        data.bz(ix, iy, iz) = data.bz(ix, iy, iz) + remap_data.flux(ix,iy,iz) - remap_data.flux(ixm,iy,iz); }, Range(1, data.nx), Range(1, data.ny), Range(0, data.nz));
 
         pw::fence();
 
