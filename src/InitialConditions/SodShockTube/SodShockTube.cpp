@@ -97,7 +97,11 @@ namespace examples
             attachBoundaryConditions("by", harness);
             attachBoundaryConditions("bz", harness);
             attachBoundaryConditions("energy_ion", harness);
-            attachBoundaryConditions("energy_electron", harness);
+						try {
+              attachBoundaryConditions("energy_electron", harness);
+						} catch(...){
+							//Not in two temperature mode
+						}
             attachBoundaryConditions("rho", harness);
             attachBoundaryConditions("vx", harness);
             attachBoundaryConditions("vy", harness);
@@ -117,8 +121,10 @@ namespace examples
         void SodShockTube<T_EOS>::initialConditions(SAMS::harness &harnessRef, LARE::LARE3D<T_EOS>::simulationData &data)
         {
             pw::portableArray<SAMS::T_dataType, 3> rho;
-            pw::portableArray<SAMS::T_dataType, 3> energy_electron;
+            pw::portableArray<SAMS::T_dataType, 3> energy_electron, energy_ion;
             pw::portableArray<SAMS::T_dataType, 1> xc, yc, zc;
+
+						bool twoTemperature = true;
 
             auto &axisRegistry = harnessRef.axisRegistry;
             axisRegistry.fillPPLocalAxis("X", xc, SAMS::staggerType::CENTRED);
@@ -127,7 +133,13 @@ namespace examples
 
             auto &varRegistry = harnessRef.variableRegistry;
             varRegistry.fillPPArray("rho", rho);
-            varRegistry.fillPPArray("energy_electron", energy_electron);
+						try {
+              varRegistry.fillPPArray("energy_electron", energy_electron);
+						} catch(...)
+						{
+						  twoTemperature = false;
+						}
+						varRegistry.fillPPArray("energy_ion", energy_ion);
 
             pw::applyKernel(
                 LAMBDA(SAMS::T_indexType ix, SAMS::T_indexType iy, SAMS::T_indexType iz)
@@ -144,7 +156,11 @@ namespace examples
                         pressure = 0.1;
                     }
                     //Specific internal energy
-                    energy_electron(ix, iy, iz) = pressure / ((data.gas_gamma - 1.0) * rho(ix, iy, iz));
+										if (twoTemperature) {
+                      energy_electron(ix, iy, iz) = pressure / ((data.gas_gamma - 1.0) * rho(ix, iy, iz));
+										} else {
+											energy_ion(ix, iy, iz) = pressure / ((data.gas_gamma - 1.0) * rho(ix, iy, iz));
+										}
                 },
                 rho.getRange(0), rho.getRange(1), rho.getRange(2));
         }

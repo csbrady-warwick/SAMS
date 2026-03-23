@@ -195,7 +195,6 @@ namespace LARE
         manager.allocate(data.alpha3, data.xcLocalRange, data.ycLocalRange, zcp);
         manager.allocate(data.visc_heat, xcp, ycp, zcp);
         manager.allocate(data.pressure, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
-        manager.allocate(data.p_e, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
         manager.allocate(data.p_i, data.xcLocalRange, data.ycLocalRange, data.zcLocalRange);
         manager.allocate(data.rho_v, xbp, ybp, zbp);
         manager.allocate(data.cv_v, xbp, ybp, zbp);

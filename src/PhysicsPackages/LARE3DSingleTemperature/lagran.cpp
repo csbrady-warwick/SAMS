@@ -612,7 +612,7 @@ namespace LARE
                 static_assert(pw::alwaysFalse<T_dataType>::value, "Unsupported EOS getPressure interface");
             }
 
-            data.pressure(ix, iy, iz) = data.p_e(ix, iy, iz) + data.p_i(ix, iy, iz);
+            data.pressure(ix, iy, iz) =  data.p_i(ix, iy, iz);
         },
                         Range(0, data.nx + 1), Range(0, data.ny + 1), Range(0, data.nz + 1));
 
@@ -791,7 +791,7 @@ namespace LARE
             data.cv1(ix, iy, iz) = vol * (1.0 + dv);
 
             // Energy at end of Lagrangian step
-            data.energy_ion(ix, iy, iz) -= dv * data.p_e(ix, iy, iz) / data.rho(ix, iy, iz);
+            data.energy_ion(ix, iy, iz) -= dv * data.p_i(ix, iy, iz) / data.rho(ix, iy, iz);
             data.energy_ion(ix, iy, iz) += (data.dt * data.visc_heat(ix, iy, iz) - dv * data.p_i(ix, iy, iz)) / data.rho(ix, iy, iz);
 
             // Update density based on volume change
