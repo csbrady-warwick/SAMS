@@ -426,8 +426,8 @@ namespace LARE
          * This is the predictor step of the LARE3D timestep
          * @param data LARE3D simulation data
          */
-        void startOfTimestep(simulationData &data, const domainData & core_data, SAMS::controlFunctions &controlFns){
-            lagrangian_step(data, core_data, controlFns);
+        void startOfTimestep(simulationData &data, const domainData & core_data){
+            lagrangian_step(data, core_data);
         }
 
         /**
@@ -457,12 +457,9 @@ namespace LARE
          * @param data LARE3D simulation data
          */
         void calculateTimestep(SAMS::timeState &timeData, simulationData &data, const domainData & core_data){
-            //timeData.dt = 1e-5;
-        };
-        /*{
             //set_dt(data, core_data);
             //timeData.dt = data.dt<timeData.dt ? data.dt : timeData.dt;
-        }*/
+        }
 
         /**
          * Gather the timestep back after all packages have calculated it
@@ -547,7 +544,7 @@ namespace LARE
          * @param data Simulation data struct
          * This function performs a Lagrangian step for the LARE3D
          */
-        void lagrangian_step(simulationData &data, const domainData & core_data, SAMS::controlFunctions &controlFns);
+        void lagrangian_step(simulationData &data, const domainData & core_data);
 
         /**
          * Core remap control function
