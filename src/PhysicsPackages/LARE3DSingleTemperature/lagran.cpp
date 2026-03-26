@@ -63,7 +63,7 @@ namespace LARE
 }
 
     template<typename T_EOS>
-    void LARE3DST<T_EOS>::lagrangian_step(simulationData &data)
+    void LARE3DST<T_EOS>::lagrangian_prepare(simulationData &data)
     {   
         using Range = pw::Range;
 
@@ -133,6 +133,10 @@ namespace LARE
                         xbp, ybp, zbp);
 
         shock_viscosity(data);
+    }
+    template<typename T_EOS>
+    void LARE3DST<T_EOS>::lagrangian_step(simulationData &data)
+    {   
         if (data.resistiveMHD)
         {
             T_dataType dt_sub = data.dtr;
