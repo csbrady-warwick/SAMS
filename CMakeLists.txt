@@ -41,6 +41,8 @@ option(ALLOW_RANK_INCONSISTENCY "Allow rank inconsistency in queries for whole c
 option(PETSC "Enable PETSc" OFF)
 #Update the field of the parabolic solvers from the net flux of the solved field, so that problems in flux form conserve exactly
 option(EXACT_FLUX_CONSERVATION "Exact flux conservation in the parabolic solvers" OFF)
+#Turn off all primary file IO, which is the writing of the diagnostics files. Defines NO_IO
+option(NO_IO "Turn off all primary file IO" OFF)
 #Relative tolerance of the parabolic solvers. If it is not set the default in the source code is used
 set(SOLVER_TOLERANCE "" CACHE STRING "Relative tolerance of the parabolic solvers, for example 1e-10")
 #Larsen's flux limiter in Braginskii thermal conduction. Turning it off defines NO_BRAGINSKII_LARSON
@@ -57,6 +59,12 @@ if(EXACT_FLUX_CONSERVATION)
   message(STATUS "Enabling exact flux conservation in the parabolic solvers")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEXACT_FLUX_CONSERVATION")
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DEXACT_FLUX_CONSERVATION")
+endif()
+
+if(NO_IO)
+  message(STATUS "Turning off all primary file IO")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DNO_IO")
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DNO_IO")
 endif()
 
 if(NOT BRAGINSKII_LARSON)

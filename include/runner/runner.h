@@ -146,6 +146,7 @@ namespace SAMS
 
 
         FULL_CALL_X(initialConditions); //Set initial conditions
+        FULL_CALL_X(propagateInitialConditions); //Pass what the initial conditions set on to packages that need it copied
         FULL_CALL_X(setBoundaryConditions); //Set boundary conditions
         FULL_CALL_X(defaultVariables); //Set default variable values
 		FULL_CALL_X(initializeBoundaryConditions);
@@ -505,6 +506,7 @@ namespace SAMS
         }
 
         void writeOutput(){
+#ifndef NO_IO
             static SAMS::T_sizeType outputCount = 0;
             //Create writer
     #if defined(USE_HDF5)
@@ -524,6 +526,7 @@ namespace SAMS
             writeOutputVariables(writer);
             writer.closeFile();
             outputCount++;
+#endif
         }
 
         //CODE HERE AND BELOW IS TO ACTUALLY RUN THE PACAKGES
@@ -559,6 +562,7 @@ namespace SAMS
             getVariables(); //Get the actual memory for variables
             defaultVariables(); //Set default variable values
             initialConditions(); //Set initial conditions
+            propagateInitialConditions(); //Pass the initial conditions on to packages that need them copied
             setBoundaryConditions(); //Attach boundary conditions
 						initializeBoundaryConditions();
             writeOutput(); //Write initial output

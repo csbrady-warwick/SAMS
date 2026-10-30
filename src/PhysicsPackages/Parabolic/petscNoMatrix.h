@@ -2,7 +2,6 @@
 #define MULTIGRIDTEST_PETSCNOMATRIX_H
 #include "runner.h"
 #include "harness.h"
-#include <petscksp.h>
 #include <vector>
 
 // Relative tolerance of the solvers of all the MultigridTest packages. Define SOLVER_TOLERANCE when compiling to set it for all of them
@@ -11,6 +10,7 @@
 #endif
 
 #if defined(USE_PETSC)
+#include <petscksp.h>
 
 namespace SAMS
 {

@@ -27,8 +27,7 @@ namespace examples
      * @param data LARE3D simulation data
      */
     template<typename T_EOS>
-    template<typename T_data>
-    void OrszagTang<T_EOS>::setControlVariables(T_data &data)
+    void OrszagTang<T_EOS>::controlVariables(typename LARE::LARE3D<T_EOS>::simulationData &data)
     {
 
         data.t_end = 3.0; // End time of the simulation
@@ -70,21 +69,6 @@ namespace examples
         // Remap kinetic energy correction
         data.rke = false;
     }
-
-#ifdef USE_KOKKOS
-    template<typename T_EOS>
-    void OrszagTang<T_EOS>::controlVariables(typename LARE::LARE3D<T_EOS>::simulationData &data, LARE::LARE3DKokkos::simulationData &kokkosData)
-    {
-        setControlVariables(data);
-        setControlVariables(kokkosData);
-    }
-#else
-    template<typename T_EOS>
-    void OrszagTang<T_EOS>::controlVariables(typename LARE::LARE3D<T_EOS>::simulationData &data)
-    {
-        setControlVariables(data);
-    }
-#endif
 
     /**
      * Set up the simulation domain
